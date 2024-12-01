@@ -5,15 +5,14 @@
 //+------------------------------------------------------------------+
 #property strict
 // EA VARIABLE DEFINITION
-input ENUM_TIMEFRAMES timeframe = PERIOD_M5;     // Timeframe for the indicators
+input ENUM_TIMEFRAMES timeframe = PERIOD_M1;     // Timeframe for the indicators
 input double lotSize = 0.01;                     // Lot size for trade
 input ulong magicNumber = 123456;                // Magic number to identify EA trades
-input double slPoints = 15;                      // Stop loss in points
-input double tpPoints = 15;                      // Take profit in points
+input double slPoints = 10;                      // Stop loss in points
+input double tpPoints = 10;                      // Take profit in points
 input double maxDeviation = 15;                  // Max deviation in points
 // MARTIN GALE VARIABLE DEFINITION
-input double lossThreshold = 5;                  // Loss threshold in pips for Martingale logic
-input double maxLotSize = 10.0;                  // Maximum allowed lot size
+input double limitLotSize = 10.0;                  // Maximum allowed lot size
 input double lotMultiplier = 2.0;                // Lot size multiplier for Martingale
 // INDICATOR VARIABLE DEFINITION
 int indicatorHandle = INVALID_HANDLE;            // WaveTrend indicator handle
@@ -29,60 +28,48 @@ struct MartingaleTrade
     double entryPrice;        // Entry price of the trade
     double stopLoss;          // Stop loss price
     double takeProfit;        // Take profit price
-    double buyVolume;         // Current sell lot size
-    double sellVolume;        // Current buy lot size
-    double baseLotSize;       // Initial lot size
+    double baseLotSize;       // Basic lot size
+    double volume;            // Current sell lot size
     double maxLotSize;        // Maximum allowable lot size
     double multiplier;        // Lot size multiplier
     bool active;              // Flag to check if trade is still active
+    bool martingaleApplied; // Flag to indicate if Martingale has been applied
 
     // Constructor to initialize a new trade
     MartingaleTrade(ulong id = 0, ENUM_ORDER_TYPE t = ORDER_TYPE_BUY, double price = 0.0, 
-                    double sl = 0.0, double tp = 0.0, double buyVol = 0.01, double sellVol = 0.01,
-                    double baseVol = 0.01, double maxVol = 1.0, double mult = 2.0)
+                    double sl = 0.0, double tp = 0.0, double vol = 0.01, double mult = 2.0)
     {
         orderID = id;
         type = t;
         entryPrice = price;
         stopLoss = sl;
         takeProfit = tp;
-        buyVolume = buyVol;
-        sellVolume = sellVol;
-        baseLotSize = baseVol;
-        maxLotSize = maxVol;
+        volume = vol;
+        maxLotSize = limitLotSize;
         multiplier = mult;
+        baseLotSize = lotSize;
         active = true;
+        martingaleApplied = false;
     }
 
     // Update lot size for the trade
     void UpdateLotSize()
     {
-        if (type == ORDER_TYPE_BUY)
-        {
-            buyVolume = MathMin(buyVolume * multiplier, maxLotSize);
-        } else {
-            sellVolume = MathMin(sellVolume * multiplier, maxLotSize);
-        }
+        volume = MathMin(volume * multiplier, maxLotSize);
         Print("Updated lot size for ", (type == ORDER_TYPE_BUY ? "BUY" : "SELL"));
     }
 
     // Reset lot size to base for the trade
     void ResetLotSize()
     {
-        if (type == ORDER_TYPE_BUY)
-            buyVolume = baseLotSize;
-        else
-            sellVolume = baseLotSize;
+        volume = baseLotSize;
         Print("Reset lot size for ", (type == ORDER_TYPE_BUY ? "BUY" : "SELL"));
     }
 
     // Get the current lot size
     double GetLotSize()
     {
-        if (type == ORDER_TYPE_BUY)
-            return buyVolume;
-        else
-            return sellVolume;
+         return volume;
     }
 
     // Handle Stop Loss logic
@@ -91,6 +78,7 @@ struct MartingaleTrade
         Print("Trade hit Stop Loss. Updating lot size for ", (type == ORDER_TYPE_BUY ? "BUY" : "SELL"), " trades.");
         UpdateLotSize();
         active = false;
+        martingaleApplied = true; // Allow Martingale for the next trade
     }
 
     // Handle Take Profit logic
@@ -98,7 +86,13 @@ struct MartingaleTrade
     {
         Print("Trade hit Take Profit. Resetting lot size for ", (type == ORDER_TYPE_BUY ? "BUY" : "SELL"), " trades.");
         ResetLotSize();
-        active = false;
+        active = false; // Deactivate the current trade
+        martingaleApplied = false; // Allow Martingale for the next trade
+    }
+    
+    void ResetMartingaleFlag()
+    {
+        martingaleApplied = false;
     }
 
     // Method to determine if the trade hit Stop Loss
@@ -116,13 +110,26 @@ struct MartingaleTrade
     }
 
     // Method to apply Martingale logic based on loss threshold
-    bool ShouldApplyMartingale(double currentPrice, double lossThreshold)
-    {
-        double priceDifference = (type == ORDER_TYPE_BUY) ? 
-                                 entryPrice - currentPrice : 
-                                 currentPrice - entryPrice;
-        return priceDifference >= lossThreshold * _Point;
-    }
+    bool ShouldApplyMartingale(double currentPrice)
+      {
+          if (HasHitStopLoss(currentPrice))
+          {
+              Print("Trade hit Stop Loss. Doubling the lot size for the next trade.");
+              UpdateLotSize(); // Double the lot size
+              return true;     // Indicate that Martingale logic should be applied
+          }
+          else if (HasHitTakeProfit(currentPrice))
+          {
+              Print("Trade hit Take Profit. Resetting lot size to base.");
+              ResetLotSize(); // Reset the lot size to the base value
+              active = false; // Deactivate the trade since TP was reached
+              return false;   // No need to apply Martingale logic after TP
+          }
+      
+          // If neither SL nor TP was hit, no action is required
+          return false;
+      }
+
 };
 MartingaleTrade currentTrade;
 
@@ -224,42 +231,16 @@ void ManageActiveTrade()
 
     if (currentTrade.active)
     {
-        if (currentTrade.HasHitStopLoss(currentPrice))
+        if (currentTrade.HasHitStopLoss(currentPrice) && !currentTrade.martingaleApplied)
         {
-            Print("Trade hit Stop Loss: ", (currentTrade.type == ORDER_TYPE_BUY ? "BUY" : "SELL"));
-            currentTrade.HandleStopLoss();
+            Print("Trade hit Stop Loss. Doubling lot size and applying Martingale logic.");
+            currentTrade.HandleStopLoss(); // Update lot size and deactivate the trade
         }
         else if (currentTrade.HasHitTakeProfit(currentPrice))
         {
-            Print("Trade hit Take Profit: ", (currentTrade.type == ORDER_TYPE_BUY ? "BUY" : "SELL"));
-            currentTrade.HandleTakeProfit();
-        }
-    }
-    else if (currentTrade.ShouldApplyMartingale(currentPrice, lossThreshold))
-    {
-        Print("Loss threshold reached. Opening a new Martingale trade for ", 
-              (currentTrade.type == ORDER_TYPE_BUY ? "BUY" : "SELL"));
-
-        // Update the lot size for the new trade
-        currentTrade.UpdateLotSize();
-        ulong newOrderID = 0;
-        if (currentTrade.type == ORDER_TYPE_BUY)
-            newOrderID = OpenTrade(currentTrade.type, currentTrade.buyVolume, "MartinGale increase");
-        else
-            newOrderID = OpenTrade(currentTrade.type, currentTrade.sellVolume, "MartinGale increase");
-        // Open a new trade
-        //ulong newOrderID = OpenTrade(currentTrade.type, currentTrade.volume, "MartinGale increase");
-
-        // Update the current trade details with the new trade
-        if (newOrderID > 0)  // Ensure trade was successfully opened
-        {
-            currentTrade.orderID = newOrderID;
-            currentTrade.entryPrice = currentPrice;
-            currentTrade.active = true;
-        }
-        else
-        {
-            Print("Failed to open a new trade for ", (currentTrade.type == ORDER_TYPE_BUY ? "BUY" : "SELL"));
+            Print("Trade hit Take Profit. Resetting lot size.");
+            currentTrade.HandleTakeProfit(); // Reset lot size
+            currentTrade.ResetMartingaleFlag(); // Allow Martingale for the next trade
         }
     }
 }
@@ -272,8 +253,6 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     // Determine WaveTrend signals
     bool buySignalWT = (wt1Previous < osCurrent && wt1Current > osCurrent); // WT1 crossing above OS
     bool sellSignalWT = (wt1Previous > obCurrent && wt1Current < obCurrent); // WT1 crossing below OB
-    bool wt1CrossOverWt2 = (wt1Previous < wt2Previous && wt1Current > wt2Current);
-    bool wt1CrossUnderWt2 = (wt1Previous > wt2Previous && wt1Current < wt2Current);
 
     // Fetch regression line price levels
     double currentHighPrice = iHigh(Symbol(), timeframe, 0);
@@ -308,42 +287,31 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     string comment = "";
 
     // Check for WaveTrend and price-level based trade signals
-    if (buySignalWT && !buyTradeTriggered && !obCrossed)
+    if (buySignalWT && lowerCrossed && !buyTradeTriggered && !obCrossed)
     {
         tradeSelection = 1;
-        comment = "WT < OS";
+        comment = "WT < OS and PRICE < LOWER";
         obCrossed = true;
         osCrossed = false;
     }
-    else if (sellSignalWT && !sellTradeTriggered && !osCrossed)
+    else if (sellSignalWT && upperCrossed && !sellTradeTriggered && !osCrossed)
     {
         tradeSelection = 2;
-        comment = "WT > OB";
+        comment = "WT > OB and PRICE > UPPER";
         osCrossed = true;
         obCrossed = false;
-    }
-
-    if (upperCrossed && wt1CrossUnderWt2 && !sellTradeTriggered)
-    {
-        tradeSelection = 2;
-        comment = "PRICE > UPPER & WT1 crossunder WT2";
-    }
-    else if (lowerCrossed && wt1CrossOverWt2 && !buyTradeTriggered)
-    {
-        tradeSelection = 1;
-        comment = "PRICE < LOWER & WT1 crossover WT2";
     }
 
     // Execute trade actions
     if (tradeSelection == 1 && !buyTradeTriggered)
     {
-        OpenTrade(ORDER_TYPE_BUY, currentTrade.buyVolume, comment);
+        OpenTrade(ORDER_TYPE_BUY, currentTrade.volume, comment);
         buyTradeTriggered = true;
         sellTradeTriggered = false;
     }
     else if (tradeSelection == 2 && !sellTradeTriggered)
     {
-        OpenTrade(ORDER_TYPE_SELL, currentTrade.sellVolume, comment);
+        OpenTrade(ORDER_TYPE_SELL, currentTrade.volume, comment);
         sellTradeTriggered = true;
         buyTradeTriggered = false;
     }
