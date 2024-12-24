@@ -3,12 +3,14 @@
 //|                                  Copyright 2024, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
+#include<Trade\SymbolInfo.mqh>
+#include<Trade\Trade.mqh>
 #property tester_indicator "LINEREG"
 #property tester_indicator "WT"
 
 //--- input parameters
-input double            tp=10;
-input double            sl=10;
+input double            SL=100;
+input double            TP=100;
 input double            lot=0.01;
 input int               candleLenght=5;
 input double            distanceThresold;
@@ -31,23 +33,44 @@ static bool preBuySignal = false, preSellSignal = false;
 static bool openedBuySignal = false, openedSellSignal = false;
 static int preBuyBarIndex = -1;
 static int preSellBarIndex = -1;
+int MagicNumber=123456;
+CTrade  trade;
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    // Initialize the indicator handle for WaveTrend and Regression Channel
-    indicatorHandle = iCustom(Symbol(), timeFrame, "WT");
-    regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
-    
-    if (indicatorHandle == INVALID_HANDLE || regressionIndicatorHandle == INVALID_HANDLE)
-    {
-        Print("Failed to initialize WaveTrend or Regression Channel indicator. Error: ", GetLastError());
-        return INIT_FAILED;
-    }    
-    Print("WaveTrend and Regression Channel Indicators Initialized");
-    currentLotSize = lot;
-    return INIT_SUCCEEDED; // Initialization successful
+   CSymbolInfo symbol_info;         //--- object for receiving symbol settings
+   symbol_info.Name(_Symbol);       //--- set the name for the appropriate symbol
+   symbol_info.RefreshRates();      //--- receive current rates and display
+   
+   Print(symbol_info.Name()," (",symbol_info.Description(),")","  Bid=",symbol_info.Bid(),"   Ask=",symbol_info.Ask());
+   Print("StopsLevel=",symbol_info.StopsLevel()," pips, FreezeLevel=",symbol_info.FreezeLevel()," pips");
+   Print("Digits=",symbol_info.Digits(),", Point=",DoubleToString(symbol_info.Point(),symbol_info.Digits()));
+   Print("SpreadFloat=",symbol_info.SpreadFloat(),", Spread(current)=",symbol_info.Spread()," pips");
+   Print("Limitations for trade operations: ",EnumToString(symbol_info.TradeMode())," (",symbol_info.TradeModeDescription(),")");
+   Print("Trades execution mode: ",EnumToString(symbol_info.TradeExecution())," (",symbol_info.TradeExecutionDescription(),")");
+   Print("Contract price calculation: ",EnumToString(symbol_info.TradeCalcMode())," (",symbol_info.TradeCalcModeDescription(),")");
+   Print("Standard contract size: ",symbol_info.ContractSize()," (",symbol_info.CurrencyBase(),")");
+   Print("Volume info: LotsMin=",symbol_info.LotsMin(),"  LotsMax=",symbol_info.LotsMax(),"  LotsStep=",symbol_info.LotsStep());
+
+   trade.SetExpertMagicNumber(MagicNumber);                 //--- set available slippage in points when buying/selling 
+   trade.SetDeviationInPoints(maxDeviation);                //--- order filling mode, the mode allowed by the server should be used
+   trade.SetTypeFilling(ORDER_FILLING_IOC);                 //--- logging mode: it would be better not to declare this method at all, the class will set the best mode on its own
+   trade.LogLevel(1); 
+   trade.SetAsyncMode(true);
+   
+   indicatorHandle = iCustom(Symbol(), timeFrame, "WT");    // Initialize the indicator handle for WaveTrend and Regression Channel
+   regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
+   
+   if (indicatorHandle == INVALID_HANDLE || regressionIndicatorHandle == INVALID_HANDLE)
+   {
+     Print("Failed to initialize WaveTrend or Regression Channel indicator. Error: ", GetLastError());
+     return INIT_FAILED;
+   }    
+   Print("WaveTrend and Regression Channel Indicators Initialized");
+   currentLotSize = lot;
+   return INIT_SUCCEEDED; // Initialization successful
 }
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
@@ -96,23 +119,20 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     bool wt1CrossOver = (wt1Current > wt2Current && wt1Previous < wt2Previous);
     bool wt1CrossUnder = (wt1Current < wt2Current && wt1Previous > wt2Previous);    
     
-    int currentBarIndex = Bars(_Symbol, timeFrame);
+    int currentBarIndex = Bars(_Symbol, timeFrame) - 1;
     
     if (wt1Current > obCurrent && currentHigh > upperCurrentPrice  && preSellBarIndex == -1) {
          preSellSignal = true;
          preSellBarIndex = currentBarIndex;
-         DrawShape("preSellSignal", iTime(_Symbol, timeFrame, 0), currentLow + (300 * _Point), clrRed, 13);
     }
     else if (wt1Current < osCurrent && currentLow < lowerCurrentPrice && preBuyBarIndex == -1) {
          preBuySignal = true;
          preBuyBarIndex = currentBarIndex;
-         DrawShape("preBuySignal", iTime(_Symbol, timeFrame, 0), currentHigh + (300 * _Point), clrGreen, 13);
     }
     
     if (preBuySignal && currentBarIndex - preBuyBarIndex <= candleLenght) {
          if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {  
             OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER");
-            DrawShape("BuySignal", iTime(_Symbol, timeFrame, 0), currentHigh + (300 * _Point), clrGreen, 16);
             preBuySignal = false;
             openedBuySignal = true;
             preBuyBarIndex = -1;
@@ -126,7 +146,6 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     if (preSellSignal && currentBarIndex - preSellBarIndex <= candleLenght) {
          if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {  
             OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER");
-            DrawShape("SellSignal", iTime(_Symbol, timeFrame, 0), currentLow + (300 * _Point), clrRed, 16);
             preSellSignal = false;
             openedSellSignal = true;
             preSellBarIndex = -1;
@@ -137,6 +156,8 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
          preSellBarIndex = -1;
     }      
 }
+
+
 bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     int totalPositions = PositionsTotal();
     for (int i=0; i<totalPositions; i++) {
@@ -148,121 +169,61 @@ bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
 
 ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
 {
-    MqlTradeRequest request = {};
-    MqlTradeResult result = {};
+   int    digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS); // Decimal places
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);         // Point size
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK); 
+   double price = (type == ORDER_TYPE_BUY) ? ask : bid;
 
-    // Check if trading is allowed on this symbol
-    if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || (currentLotSize >= lotSizeLimit && lotSizeLimitFlag))
-    {
-        Print("Trading not allowed on symbol: ", _Symbol);
-        return 0;
-    }
+   // Get the Stops Level (minimum stop distance in points)
+   int stopsLevel = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   if (stopsLevel < 0) stopsLevel = 0; // If unavailable, default to 0
+   
+   // Adjust SL and TP to meet the stops level requirement
+   double stopLoss = (type == ORDER_TYPE_BUY) 
+                     ? NormalizeDouble(price - MathMax(SL * point, stopsLevel * point), digits)
+                     : NormalizeDouble(price + MathMax(SL * point, stopsLevel * point), digits);
+                     
+   double takeProfit = (type == ORDER_TYPE_BUY) 
+                       ? NormalizeDouble(price + MathMax(TP * point, stopsLevel * point), digits)
+                       : NormalizeDouble(price - MathMax(TP * point, stopsLevel * point), digits);
 
-    double price = (type == ORDER_TYPE_BUY) ? NormalizeDouble(SymbolInfoDouble(_Symbol, SYMBOL_ASK), _Digits)
-                                            : NormalizeDouble(SymbolInfoDouble(_Symbol, SYMBOL_BID), _Digits);
-    double stopLoss = (type == ORDER_TYPE_BUY) ? NormalizeDouble(price - sl * _Point, _Digits)
-                                               : NormalizeDouble(price + sl * _Point, _Digits);
-    double takeProfit = (type == ORDER_TYPE_BUY) ? NormalizeDouble(price + tp * _Point, _Digits)
-                                                 : NormalizeDouble(price - tp * _Point, _Digits);
+   // Ensure trading is allowed and check lot size limits
+   if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || (currentLotSize >= lotSizeLimit && lotSizeLimitFlag))
+   {
+       Print("Trading not allowed or lot size exceeds limit on symbol: ", _Symbol);
+       return 0;
+   }
 
-    long currentSpread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
-    double spreadInPoints = currentSpread * _Point; // Spread in price terms
-
-    // Check if the spread is within acceptable limits
-    if (currentSpread >= minSpreadThresold && currentSpread <= maxSpreadThresold)
-    {
-        Print("Current spread: ", spreadInPoints, " pips, within limits.");
-    }
-    else
-    {
-        Print("Skipping trade due to spread limit violation: cSpread: ", currentSpread, " > aSpread: ", maxSpreadThresold);
-        return 0; // Skip opening a new trade
-    }
-
-    // Retrieve and adjust for the broker's minimum stop level
-    int minStopLevelPoints = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL); // In points
-    double minStopLevelPrice = (minStopLevelPoints +5) * _Point;                       // In price terms
-
-    if (minStopLevelPoints <= 0)
-    {
-        Print("Invalid stop level value or none specified by the broker. Using spread value only.");
-    }
-
-    // Ensure SL and TP are adjusted for both spread and stop level
-    if (type == ORDER_TYPE_BUY)
-    {
-        // Adjust SL to be at least the greater of spread or min stop level below price
-        double minStopLossDistance = MathMax(spreadInPoints, minStopLevelPrice);
-        if ((price - stopLoss) < minStopLossDistance)
-        {
-            stopLoss = NormalizeDouble(price - minStopLossDistance, _Digits);
-            Print("Adjusted SL for BUY to meet minimum requirements (spread & stop level): ", stopLoss);
-        }
-
-        // Adjust TP to be at least the greater of spread or min stop level above price
-        double minTakeProfitDistance = MathMax(spreadInPoints, minStopLevelPrice);
-        if ((takeProfit - price) < minTakeProfitDistance)
-        {
-            takeProfit = NormalizeDouble(price + minTakeProfitDistance, _Digits);
-            Print("Adjusted TP for BUY to meet minimum requirements (spread & stop level): ", takeProfit);
-        }
-    }
-    else if (type == ORDER_TYPE_SELL)
-    {
-        // Adjust SL to be at least the greater of spread or min stop level above price
-        double minStopLossDistance = MathMax(spreadInPoints, minStopLevelPrice);
-        if ((stopLoss - price) < minStopLossDistance)
-        {
-            stopLoss = NormalizeDouble(price + minStopLossDistance, _Digits);
-            Print("Adjusted SL for SELL to meet minimum requirements (spread & stop level): ", stopLoss);
-        }
-
-        // Adjust TP to be at least the greater of spread or min stop level below price
-        double minTakeProfitDistance = MathMax(spreadInPoints, minStopLevelPrice);
-        if ((price - takeProfit) < minTakeProfitDistance)
-        {
-            takeProfit = NormalizeDouble(price - minTakeProfitDistance, _Digits);
-            Print("Adjusted TP for SELL to meet minimum requirements (spread & stop level): ", takeProfit);
-        }
-    }
-
-    // Log trade details for debugging
-    Print("Preparing to open trade. Type: ", type, ", Price: ", price, ", SL: ", stopLoss, ", TP: ", takeProfit, ", Digits: ", _Digits);
-
-    // Initialize trade request parameters
-    request.action = TRADE_ACTION_DEAL;
-    request.symbol = _Symbol;
-    request.volume = volume;
-    request.type = type;
-    request.sl = stopLoss;
-    request.tp = takeProfit;
-    request.price = price;
-    request.type_filling = ORDER_FILLING_IOC; // Use Immediate or Cancel (IOC)
-    request.comment = comment;
-    request.deviation = maxDeviation;
-
-    // Send the trade request and handle result
-    if (!OrderSend(request, result))
-    {
-        Print("Failed to send order - Error: ", GetLastError());
-        PrintFormat("retcode=%u  deal=%I64u  order=%I64u ", result.retcode, result.deal, result.order);
-        ResetLastError();
-        return 0;
-    }
-
-    if (result.retcode == TRADE_RETCODE_DONE)
-    {
-        Print("Trade opened successfully - Ticket: ", result.order);
-        return result.order;
-    }
-    else
-    {
-        Print("Order failed - Retcode: ", result.retcode);
-    }
-
-    return 0;
+   // Place the trade
+   if (type == ORDER_TYPE_BUY) 
+   {
+       if (!trade.Buy(volume, _Symbol, price, stopLoss, takeProfit, comment))
+       {
+           Print("Buy() method failed. Return code=", trade.ResultRetcode(),
+                 ". Code description: ", trade.ResultRetcodeDescription());
+       }
+       else
+       {
+           Print("Buy() method executed successfully. Return code=", trade.ResultRetcode(),
+                 " (", trade.ResultRetcodeDescription(), ")");
+       }
+   } 
+   else if (type == ORDER_TYPE_SELL) 
+   {
+       if (!trade.Sell(volume, _Symbol, price, stopLoss, takeProfit, comment))
+       {
+           Print("Sell() method failed. Return code=", trade.ResultRetcode(),
+                 ". Code description: ", trade.ResultRetcodeDescription());
+       }
+       else
+       {
+           Print("Sell() method executed successfully. Return code=", trade.ResultRetcode(),
+                 " (", trade.ResultRetcodeDescription(), ")");
+       }
+   }
+   return 0;
 }
-
 
 void CheckLastTradeClosed() {
    datetime endTime = TimeCurrent(); 
