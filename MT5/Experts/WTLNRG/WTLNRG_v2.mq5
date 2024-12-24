@@ -35,6 +35,10 @@ static int preBuyBarIndex = -1;
 static int preSellBarIndex = -1;
 int MagicNumber=123456;
 CTrade  trade;
+string chartComment = "";                          // Global variable to store the chart comment
+bool commentWrittenBuy = false;                    // Tracks if the Buy comment has been written
+bool commentWrittenSell = false;                   // Tracks if the Sell comment has been written
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
@@ -117,17 +121,30 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     double upperCurrentPrice = ObjectGetValueByTime(0, "LinRegUpperLine", iTime(Symbol(), timeFrame, 0));
     double lowerCurrentPrice = ObjectGetValueByTime(0, "LinRegLowerLine", iTime(Symbol(), timeFrame, 0));
     bool wt1CrossOver = (wt1Current > wt2Current && wt1Previous < wt2Previous);
-    bool wt1CrossUnder = (wt1Current < wt2Current && wt1Previous > wt2Previous);    
-    
+    bool wt1CrossUnder = (wt1Current < wt2Current && wt1Previous > wt2Previous);
+    datetime prevCandleTime = iTime(Symbol(), timeFrame, 1);
+ 
     int currentBarIndex = Bars(_Symbol, timeFrame) - 1;
     
     if (wt1Current > obCurrent && currentHigh > upperCurrentPrice  && preSellBarIndex == -1) {
          preSellSignal = true;
          preSellBarIndex = currentBarIndex;
+         if (!commentWrittenSell) {
+            chartComment = "TRADE to OPEN: SELL\nWT1 > OB " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
+            //UpdateChartComment("TRADE to OPEN: SELL");
+            //UpdateChartComment("WT1 > OB " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
+            commentWrittenSell = true; // Mark as written
+        }  
     }
     else if (wt1Current < osCurrent && currentLow < lowerCurrentPrice && preBuyBarIndex == -1) {
          preBuySignal = true;
          preBuyBarIndex = currentBarIndex;
+         if (!commentWrittenBuy) {
+            chartComment = "TRADE to OPEN: BUY\nWT1 < OS " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
+            //UpdateChartComment("TRADE to OPEN: BUY");
+            //UpdateChartComment("WT1 < OS " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
+            commentWrittenBuy = true; // Mark as written
+        }
     }
     
     if (preBuySignal && currentBarIndex - preBuyBarIndex <= candleLenght) {
@@ -136,6 +153,10 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
             preBuySignal = false;
             openedBuySignal = true;
             preBuyBarIndex = -1;
+            chartComment += "WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
+            Comment(chartComment);
+            //UpdateChartComment("WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
+            commentWrittenBuy = false;
          }
     } else {
          preBuySignal = false;
@@ -149,6 +170,10 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
             preSellSignal = false;
             openedSellSignal = true;
             preSellBarIndex = -1;
+            chartComment += "WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
+            Comment(chartComment);
+            //UpdateChartComment("WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
+            commentWrittenSell = false;
          }
     } else {
          preSellSignal = false;
@@ -194,6 +219,8 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
        Print("Trading not allowed or lot size exceeds limit on symbol: ", _Symbol);
        return 0;
    }
+   
+   bool tradeSuccess = false;
 
    // Place the trade
    if (type == ORDER_TYPE_BUY) 
@@ -202,11 +229,13 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
        {
            Print("Buy() method failed. Return code=", trade.ResultRetcode(),
                  ". Code description: ", trade.ResultRetcodeDescription());
+           
        }
        else
        {
            Print("Buy() method executed successfully. Return code=", trade.ResultRetcode(),
                  " (", trade.ResultRetcodeDescription(), ")");
+           tradeSuccess = true;
        }
    } 
    else if (type == ORDER_TYPE_SELL) 
@@ -220,7 +249,14 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
        {
            Print("Sell() method executed successfully. Return code=", trade.ResultRetcode(),
                  " (", trade.ResultRetcodeDescription(), ")");
+           tradeSuccess = true;
        }
+   }
+   // Clear the chart comment if the trade is successful
+   if (tradeSuccess)
+   {
+       chartComment = ""; // Reset the global comment string
+       Comment("");       // Clear the comment from the chart
    }
    return 0;
 }
@@ -306,5 +342,16 @@ void DrawShape(string name, datetime time, double price, color clr, int arrowSym
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 2);
         ObjectSetInteger(0, arrowName, OBJPROP_ARROWCODE, arrowSymbol);
     }
+}
+
+void UpdateChartComment(string newInfo)
+{
+    // Append new information to the comment
+    if (chartComment != "")
+        chartComment += "\n"; // Add a newline if there's already content
+    chartComment += newInfo;
+
+    // Update the comment on the chart
+    Comment(chartComment);
 }
 //+------------------------------------------------------------------+
