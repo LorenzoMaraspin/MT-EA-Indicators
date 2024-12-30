@@ -7,7 +7,6 @@
 #include<Trade\Trade.mqh>
 #property tester_indicator "LINEREG"
 #property tester_indicator "WT"
-
 //--- input parameters
 input double            SL=100;
 input double            TP=100;
@@ -21,9 +20,9 @@ input double            multiplier=2.0;
 input bool              multiplierFlag=true;
 input ENUM_TIMEFRAMES   timeFrame = PERIOD_M1;
 input ulong             maxDeviation = 2;
-input int               minSpreadThresold=3;
-input int               maxSpreadThresold=10;
 // INDICATOR VARIABLE DEFINITION
+int                     fileHandle = -1;                                // File handle
+string                  logFileName = "EA_Log.csv";                     // Log file name (stored in the MQL5/Files directory)
 int                     indicatorHandle = INVALID_HANDLE;               // WaveTrend indicator handle
 int                     regressionIndicatorHandle = INVALID_HANDLE;     // Regression channel indicator handle
 static bool             isTradeActive = false;                          // Flag to indicate if a trade is currently active
@@ -45,7 +44,6 @@ static bool             commentWrittenSell = false;                     // Track
 //+------------------------------------------------------------------+
 int OnInit()
 {
-
    OutputInitializzationVariables();
    indicatorHandle = iCustom(Symbol(), timeFrame, "WT");    // Initialize the indicator handle for WaveTrend and Regression Channel
    regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
@@ -57,25 +55,42 @@ int OnInit()
    }    
    Print("WaveTrend and Regression Channel Indicators Initialized");
    currentLotSize = lot;
+   
+   // Open the file in CSV write mode
+   fileHandle = FileOpen(logFileName, FILE_CSV | FILE_WRITE | FILE_COMMON, ";");
+   if (fileHandle < 0)
+   {
+     Print("Error opening log file: ", GetLastError());
+     return INIT_FAILED;
+   }
+   
+   // Write the header to the log file
+   FileWrite(
+      fileHandle, 
+      "Time", 
+      "Symbol", 
+      "Direction",
+      "Distance", 
+      "WT1_P", 
+      "WT2_P",
+      "WT1_C", 
+      "WT2_C",
+      "Upper"
+      "Lower",
+      "ConditionMet"
+   );
+   
    return INIT_SUCCEEDED; // Initialization successful
 }
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
-  {
-    // Release the indicator handles
-    if (indicatorHandle != INVALID_HANDLE)
-    {
-        IndicatorRelease(indicatorHandle);
-        indicatorHandle = INVALID_HANDLE;
-    }
-    if (regressionIndicatorHandle != INVALID_HANDLE)
-    {
-        IndicatorRelease(regressionIndicatorHandle);
-        regressionIndicatorHandle = INVALID_HANDLE;
-    }
-  }
+{
+    if (indicatorHandle != INVALID_HANDLE) IndicatorRelease(indicatorHandle);
+    if (regressionIndicatorHandle != INVALID_HANDLE) IndicatorRelease(regressionIndicatorHandle);
+    if (fileHandle >= 0) FileClose(fileHandle);
+}
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
@@ -112,61 +127,47 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     if (wt1Current > obCurrent && currentHigh > upperCurrentPrice  && preSellBarIndex == -1) {
          preSellSignal = true;
          preSellBarIndex = currentBarIndex;
-         if (!commentWrittenSell) {
-            chartComment += "TRADE to OPEN: SELL \nWT1 > OB -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
-            Comment(chartComment);
-            commentWrittenSell = true;
-        }  
+         FileWrite(fileHandle, prevCandleTime, _Symbol, "SELL", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 > OB");
+         //UpdateChartComment("TRADE to OPEN: SELL \nWT1 > OB -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
     }
     else if (wt1Current < osCurrent && currentLow < lowerCurrentPrice && preBuyBarIndex == -1) {
          preBuySignal = true;
          preBuyBarIndex = currentBarIndex;
-         if (!commentWrittenBuy) {
-            chartComment += "TRADE to OPEN: BUY \nWT1 < OS -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
-            Comment(chartComment);
-            commentWrittenBuy = true;
-        }
+         
+         FileWrite(fileHandle, prevCandleTime, _Symbol, "BUY", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 < OS");
+         //UpdateChartComment("TRADE to OPEN: BUY \nWT1 < OS -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
     }
     
     if (preBuySignal && currentBarIndex - preBuyBarIndex <= candleLenght) {
-         if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {  
+         if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {
+            FileWrite(fileHandle, prevCandleTime, _Symbol, "BUY", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 > WT2");
+            //UpdateChartComment("WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
             OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER", distanceCurrent);
             preBuySignal = false;
             openedBuySignal = true;
             preBuyBarIndex = -1;
-            chartComment += "WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
-            Comment(chartComment);
-            commentWrittenBuy = false;
          }
     } else {
          preBuySignal = false;
          openedBuySignal = false;
          preBuyBarIndex = -1;
-         chartComment = "";
-         Comment("");
-         commentWrittenBuy = false;
     }
     
     if (preSellSignal && currentBarIndex - preSellBarIndex <= candleLenght) {
-         if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {  
+         if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {
+            FileWrite(fileHandle, prevCandleTime, _Symbol, "SELL", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 < WT2");
+            //UpdateChartComment("WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
             OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER", distanceCurrent);
             preSellSignal = false;
             openedSellSignal = true;
             preSellBarIndex = -1;
-            chartComment += "WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
-            Comment(chartComment);
-            commentWrittenSell = false;
          }
     } else {
          preSellSignal = false;
          openedSellSignal = false;
          preSellBarIndex = -1;
-         chartComment = "";
-         Comment("");
-         commentWrittenSell = false;
     }      
 }
-
 
 bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     int totalPositions = PositionsTotal();
@@ -227,10 +228,6 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double dist
            Print("Sell() method executed successfully. Return code=", trade.ResultRetcode()," (", trade.ResultRetcodeDescription(), ")");
        }
    }
-   chartComment = "";
-   Comment("");
-   commentWrittenBuy = false;
-   commentWrittenSell = false;
    return 0;
 }
 
@@ -343,9 +340,9 @@ void OutputInitializzationVariables() {
 
 void UpdateChartComment(string newInfo)
 {
-    // Append new information to the comment
+    // Append new information to the chart comment
     if (chartComment != "")
-        chartComment += "\n"; // Add a newline if there's already content
+        chartComment += "\n";
     chartComment += newInfo;
 
     // Update the comment on the chart
