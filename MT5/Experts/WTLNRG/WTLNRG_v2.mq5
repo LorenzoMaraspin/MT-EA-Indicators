@@ -13,7 +13,8 @@ input double            SL=100;
 input double            TP=100;
 input double            lot=0.01;
 input int               candleLenght=5;
-input double            distanceThresold;
+input double            distanceThresold=1;
+input bool              distanceCheck=true;
 input double            lotSizeLimit=10.0;
 input bool              lotSizeLimitFlag=true;
 input double            multiplier=2.0;
@@ -23,47 +24,29 @@ input ulong             maxDeviation = 2;
 input int               minSpreadThresold=3;
 input int               maxSpreadThresold=10;
 // INDICATOR VARIABLE DEFINITION
-int indicatorHandle = INVALID_HANDLE;              // WaveTrend indicator handle
-int regressionIndicatorHandle = INVALID_HANDLE;    // Regression channel indicator handle
-static bool isTradeActive = false;                 // Flag to indicate if a trade is currently active
-static double currentLotSize;                      // Tracks the current lot size to be used
-static ulong lastDealTicketChecked;                // Last closed trade ticket id
-static int startBarIndex;                          // Bar index when the pre-signal was detected
-static bool preBuySignal = false, preSellSignal = false;
-static bool openedBuySignal = false, openedSellSignal = false;
-static int preBuyBarIndex = -1;
-static int preSellBarIndex = -1;
-int MagicNumber=123456;
-CTrade  trade;
-string chartComment = "";                          // Global variable to store the chart comment
-bool commentWrittenBuy = false;                    // Tracks if the Buy comment has been written
-bool commentWrittenSell = false;                   // Tracks if the Sell comment has been written
+int                     indicatorHandle = INVALID_HANDLE;               // WaveTrend indicator handle
+int                     regressionIndicatorHandle = INVALID_HANDLE;     // Regression channel indicator handle
+static bool             isTradeActive = false;                          // Flag to indicate if a trade is currently active
+static double           currentLotSize;                                 // Tracks the current lot size to be used
+static ulong            lastDealTicketChecked;                          // Last closed trade ticket id
+static int              startBarIndex;                                  // Bar index when the pre-signal was detected
+static bool             preBuySignal = false, preSellSignal = false;
+static bool             openedBuySignal = false, openedSellSignal = false;
+static int              preBuyBarIndex = -1;
+static int              preSellBarIndex = -1;
+int                     MagicNumber=123456;
+CTrade                  trade;
+static string           chartComment = "";                              // Global variable to store the chart comment
+static bool             commentWrittenBuy = false;                      // Tracks if the Buy comment has been written
+static bool             commentWrittenSell = false;                     // Tracks if the Sell comment has been written
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   CSymbolInfo symbol_info;         //--- object for receiving symbol settings
-   symbol_info.Name(_Symbol);       //--- set the name for the appropriate symbol
-   symbol_info.RefreshRates();      //--- receive current rates and display
-   
-   Print(symbol_info.Name()," (",symbol_info.Description(),")","  Bid=",symbol_info.Bid(),"   Ask=",symbol_info.Ask());
-   Print("StopsLevel=",symbol_info.StopsLevel()," pips, FreezeLevel=",symbol_info.FreezeLevel()," pips");
-   Print("Digits=",symbol_info.Digits(),", Point=",DoubleToString(symbol_info.Point(),symbol_info.Digits()));
-   Print("SpreadFloat=",symbol_info.SpreadFloat(),", Spread(current)=",symbol_info.Spread()," pips");
-   Print("Limitations for trade operations: ",EnumToString(symbol_info.TradeMode())," (",symbol_info.TradeModeDescription(),")");
-   Print("Trades execution mode: ",EnumToString(symbol_info.TradeExecution())," (",symbol_info.TradeExecutionDescription(),")");
-   Print("Contract price calculation: ",EnumToString(symbol_info.TradeCalcMode())," (",symbol_info.TradeCalcModeDescription(),")");
-   Print("Standard contract size: ",symbol_info.ContractSize()," (",symbol_info.CurrencyBase(),")");
-   Print("Volume info: LotsMin=",symbol_info.LotsMin(),"  LotsMax=",symbol_info.LotsMax(),"  LotsStep=",symbol_info.LotsStep());
 
-   trade.SetExpertMagicNumber(MagicNumber);                 //--- set available slippage in points when buying/selling 
-   trade.SetDeviationInPoints(maxDeviation);                //--- order filling mode, the mode allowed by the server should be used
-   trade.SetTypeFilling(ORDER_FILLING_IOC);                 //--- logging mode: it would be better not to declare this method at all, the class will set the best mode on its own
-   trade.LogLevel(1); 
-   trade.SetAsyncMode(true);
-   
+   OutputInitializzationVariables();
    indicatorHandle = iCustom(Symbol(), timeFrame, "WT");    // Initialize the indicator handle for WaveTrend and Regression Channel
    regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
    
@@ -102,11 +85,11 @@ void OnTick()
     if (multiplierFlag)
       CheckLastTradeClosed();
      // Fetch WaveTrend indicator values and Regression Channel indicator values
-    double wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current, upperLineCurrent, lowerLineCurrent;
-    if (!CopyWaveTrendValues(wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current) && !CopyRegressionValues(upperLineCurrent, lowerLineCurrent))
+    double wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current, upperLineCurrent, lowerLineCurrent, distanceCurrent;
+    if (!CopyWaveTrendValues(wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current) && !CopyRegressionValues(upperLineCurrent, lowerLineCurrent, distanceCurrent))
         return;
     
-    CheckTradeConditions(wt1Current, wt1Previous, wt2Current, wt2Previous, osLevel1Current, obLevel1Current);
+    CheckTradeConditions(wt1Current, wt1Previous, wt2Current, wt2Previous, osLevel1Current, obLevel1Current, distanceCurrent);
    
   }
 //+------------------------------------------------------------------+
@@ -114,7 +97,7 @@ void OnTick()
 //| Expert Advisor logic indicator functions                         |
 //+------------------------------------------------------------------+
 void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Current, double wt2Previous, 
-                          double osCurrent, double obCurrent)
+                          double osCurrent, double obCurrent, double distanceCurrent)
 {
     double currentHigh = iHigh(Symbol(), timeFrame, 0);
     double currentLow = iLow(Symbol(), timeFrame, 0);
@@ -130,55 +113,57 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
          preSellSignal = true;
          preSellBarIndex = currentBarIndex;
          if (!commentWrittenSell) {
-            chartComment = "TRADE to OPEN: SELL\nWT1 > OB " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
-            //UpdateChartComment("TRADE to OPEN: SELL");
-            //UpdateChartComment("WT1 > OB " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
-            commentWrittenSell = true; // Mark as written
+            chartComment += "TRADE to OPEN: SELL \nWT1 > OB -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
+            Comment(chartComment);
+            commentWrittenSell = true;
         }  
     }
     else if (wt1Current < osCurrent && currentLow < lowerCurrentPrice && preBuyBarIndex == -1) {
          preBuySignal = true;
          preBuyBarIndex = currentBarIndex;
          if (!commentWrittenBuy) {
-            chartComment = "TRADE to OPEN: BUY\nWT1 < OS " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
-            //UpdateChartComment("TRADE to OPEN: BUY");
-            //UpdateChartComment("WT1 < OS " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
-            commentWrittenBuy = true; // Mark as written
+            chartComment += "TRADE to OPEN: BUY \nWT1 < OS -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
+            Comment(chartComment);
+            commentWrittenBuy = true;
         }
     }
     
     if (preBuySignal && currentBarIndex - preBuyBarIndex <= candleLenght) {
          if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {  
-            OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER");
+            OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER", distanceCurrent);
             preBuySignal = false;
             openedBuySignal = true;
             preBuyBarIndex = -1;
-            chartComment += "WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
+            chartComment += "WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
             Comment(chartComment);
-            //UpdateChartComment("WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
             commentWrittenBuy = false;
          }
     } else {
          preBuySignal = false;
          openedBuySignal = false;
          preBuyBarIndex = -1;
+         chartComment = "";
+         Comment("");
+         commentWrittenBuy = false;
     }
     
     if (preSellSignal && currentBarIndex - preSellBarIndex <= candleLenght) {
          if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {  
-            OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER");
+            OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER", distanceCurrent);
             preSellSignal = false;
             openedSellSignal = true;
             preSellBarIndex = -1;
-            chartComment += "WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES);
+            chartComment += "WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES) + "\n";
             Comment(chartComment);
-            //UpdateChartComment("WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES));
             commentWrittenSell = false;
          }
     } else {
          preSellSignal = false;
          openedSellSignal = false;
          preSellBarIndex = -1;
+         chartComment = "";
+         Comment("");
+         commentWrittenSell = false;
     }      
 }
 
@@ -192,7 +177,7 @@ bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     return false;
 }
 
-ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
+ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double distanceCurrent)
 {
    int    digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS); // Decimal places
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);         // Point size
@@ -214,50 +199,38 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
                        : NormalizeDouble(price - MathMax(TP * point, stopsLevel * point), digits);
 
    // Ensure trading is allowed and check lot size limits
-   if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || (currentLotSize >= lotSizeLimit && lotSizeLimitFlag))
+   if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || (currentLotSize >= lotSizeLimit && lotSizeLimitFlag) || ((distanceCurrent < distanceThresold) && distanceCheck == true))
    {
        Print("Trading not allowed or lot size exceeds limit on symbol: ", _Symbol);
        return 0;
    }
-   
-   bool tradeSuccess = false;
-
    // Place the trade
    if (type == ORDER_TYPE_BUY) 
    {
        if (!trade.Buy(volume, _Symbol, price, stopLoss, takeProfit, comment))
        {
-           Print("Buy() method failed. Return code=", trade.ResultRetcode(),
-                 ". Code description: ", trade.ResultRetcodeDescription());
-           
+           Print("Buy() method failed. Return code=", trade.ResultRetcode(),". Code description: ", trade.ResultRetcodeDescription());
        }
        else
        {
-           Print("Buy() method executed successfully. Return code=", trade.ResultRetcode(),
-                 " (", trade.ResultRetcodeDescription(), ")");
-           tradeSuccess = true;
+           Print("Buy() method executed successfully. Return code=", trade.ResultRetcode()," (", trade.ResultRetcodeDescription(), ")");
        }
    } 
    else if (type == ORDER_TYPE_SELL) 
    {
        if (!trade.Sell(volume, _Symbol, price, stopLoss, takeProfit, comment))
        {
-           Print("Sell() method failed. Return code=", trade.ResultRetcode(),
-                 ". Code description: ", trade.ResultRetcodeDescription());
+           Print("Sell() method failed. Return code=", trade.ResultRetcode(),". Code description: ", trade.ResultRetcodeDescription());
        }
        else
        {
-           Print("Sell() method executed successfully. Return code=", trade.ResultRetcode(),
-                 " (", trade.ResultRetcodeDescription(), ")");
-           tradeSuccess = true;
+           Print("Sell() method executed successfully. Return code=", trade.ResultRetcode()," (", trade.ResultRetcodeDescription(), ")");
        }
    }
-   // Clear the chart comment if the trade is successful
-   if (tradeSuccess)
-   {
-       chartComment = ""; // Reset the global comment string
-       Comment("");       // Clear the comment from the chart
-   }
+   chartComment = "";
+   Comment("");
+   commentWrittenBuy = false;
+   commentWrittenSell = false;
    return 0;
 }
 
@@ -313,12 +286,13 @@ bool CopyWaveTrendValues(double &wt1Current, double &wt1Previous, double &wt2Cur
 }
 
 // Helper function to copy Regression Channel values
-bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent)
+bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent, double &distanceCurrent)
 {
-    double upperLineArray[], lowerLineArray[];
+    double upperLineArray[], lowerLineArray[], distanceArray[];
 
     if (CopyBuffer(regressionIndicatorHandle, 0, 0, 2, upperLineArray) <= 0 ||
-        CopyBuffer(regressionIndicatorHandle, 2, 0, 2, lowerLineArray) <= 0)
+        CopyBuffer(regressionIndicatorHandle, 2, 0, 2, lowerLineArray) <= 0 ||
+        CopyBuffer(regressionIndicatorHandle, 3, 0, 2, distanceArray) <= 0)
     {
         Print("Error copying Regression Channel buffer values: ", GetLastError());
         ResetLastError();
@@ -327,6 +301,7 @@ bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent)
 
     upperLineCurrent = upperLineArray[0];
     lowerLineCurrent = lowerLineArray[0];
+    distanceCurrent = distanceArray[0];
     return true;
 } 
 void DrawShape(string name, datetime time, double price, color clr, int arrowSymbol)
@@ -342,6 +317,28 @@ void DrawShape(string name, datetime time, double price, color clr, int arrowSym
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 2);
         ObjectSetInteger(0, arrowName, OBJPROP_ARROWCODE, arrowSymbol);
     }
+}
+
+void OutputInitializzationVariables() {
+   CSymbolInfo symbol_info;         //--- object for receiving symbol settings
+   symbol_info.Name(_Symbol);       //--- set the name for the appropriate symbol
+   symbol_info.RefreshRates();      //--- receive current rates and display
+   
+   Print(symbol_info.Name()," (",symbol_info.Description(),")","  Bid=",symbol_info.Bid(),"   Ask=",symbol_info.Ask());
+   Print("StopsLevel=",symbol_info.StopsLevel()," pips, FreezeLevel=",symbol_info.FreezeLevel()," pips");
+   Print("Digits=",symbol_info.Digits(),", Point=",DoubleToString(symbol_info.Point(),symbol_info.Digits()));
+   Print("SpreadFloat=",symbol_info.SpreadFloat(),", Spread(current)=",symbol_info.Spread()," pips");
+   Print("Limitations for trade operations: ",EnumToString(symbol_info.TradeMode())," (",symbol_info.TradeModeDescription(),")");
+   Print("Trades execution mode: ",EnumToString(symbol_info.TradeExecution())," (",symbol_info.TradeExecutionDescription(),")");
+   Print("Contract price calculation: ",EnumToString(symbol_info.TradeCalcMode())," (",symbol_info.TradeCalcModeDescription(),")");
+   Print("Standard contract size: ",symbol_info.ContractSize()," (",symbol_info.CurrencyBase(),")");
+   Print("Volume info: LotsMin=",symbol_info.LotsMin(),"  LotsMax=",symbol_info.LotsMax(),"  LotsStep=",symbol_info.LotsStep());
+   
+   trade.SetExpertMagicNumber(MagicNumber);                 //--- set available slippage in points when buying/selling 
+   trade.SetDeviationInPoints(maxDeviation);                //--- order filling mode, the mode allowed by the server should be used
+   trade.SetTypeFilling(ORDER_FILLING_IOC);                 //--- logging mode: it would be better not to declare this method at all, the class will set the best mode on its own
+   trade.LogLevel(1); 
+   trade.SetAsyncMode(true);
 }
 
 void UpdateChartComment(string newInfo)
