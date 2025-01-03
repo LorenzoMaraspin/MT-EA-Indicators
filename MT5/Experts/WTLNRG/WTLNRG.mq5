@@ -3,68 +3,94 @@
 //|                                  Copyright 2024, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
+#include<Trade\SymbolInfo.mqh>
+#include<Trade\Trade.mqh>
 #property tester_indicator "LINEREG"
 #property tester_indicator "WT"
-
 //--- input parameters
-input double   tp=10;
-input double   sl=10;
-input double   lot=0.01;
-input int      candleLenght=5;
-input double   distanceThresold;
-input double   lotSizeLimit=10.0;
-input bool     lotSizeLimitFlag=true;
-input double   multiplier=2.0;
-input bool     multiplierFlag=true;
-input ENUM_TIMEFRAMES timeFrame = PERIOD_M1;
-input ulong maxDeviation = 2;
-
+input double            SL=100;
+input double            TP=100;
+input double            lot=0.01;
+input int               candleLenght=5;
+input double            distanceThresold=1;
+input bool              distanceCheck=true;
+input double            lotSizeLimit=10.0;
+input bool              lotSizeLimitFlag=true;
+input double            multiplier=2.0;
+input bool              multiplierFlag=true;
+input ENUM_TIMEFRAMES   timeFrame = PERIOD_M1;
+input ulong             maxDeviation = 2;
 // INDICATOR VARIABLE DEFINITION
-int indicatorHandle = INVALID_HANDLE;              // WaveTrend indicator handle
-int regressionIndicatorHandle = INVALID_HANDLE;    // Regression channel indicator handle
-static bool isTradeActive = false;                 // Flag to indicate if a trade is currently active
-static double currentLotSize;                      // Tracks the current lot size to be used
-static ulong lastDealTicketChecked;                // Last closed trade ticket id
-static int startBarIndex;                          // Bar index when the pre-signal was detected
-static bool preBuySignal = false, preSellSignal = false;
-static bool openedBuySignal = false, openedSellSignal = false;
-static int preBuyBarIndex = -1;
-static int preSellBarIndex = -1;
+int                     fileHandle = -1;                                // File handle
+string                  logFileName = "EA_Log.csv";                     // Log file name (stored in the MQL5/Files directory)
+int                     indicatorHandle = INVALID_HANDLE;               // WaveTrend indicator handle
+int                     regressionIndicatorHandle = INVALID_HANDLE;     // Regression channel indicator handle
+static bool             isTradeActive = false;                          // Flag to indicate if a trade is currently active
+static double           currentLotSize;                                 // Tracks the current lot size to be used
+static ulong            lastDealTicketChecked;                          // Last closed trade ticket id
+static int              startBarIndex;                                  // Bar index when the pre-signal was detected
+static bool             preBuySignal = false, preSellSignal = false;
+static bool             openedBuySignal = false, openedSellSignal = false;
+static int              preBuyBarIndex = -1;
+static int              preSellBarIndex = -1;
+int                     MagicNumber=123456;
+CTrade                  trade;
+static string           chartComment = "";                              // Global variable to store the chart comment
+static bool             commentWrittenBuy = false;                      // Tracks if the Buy comment has been written
+static bool             commentWrittenSell = false;                     // Tracks if the Sell comment has been written
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    // Initialize the indicator handle for WaveTrend and Regression Channel
-    indicatorHandle = iCustom(Symbol(), timeFrame, "WT");
-    regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
-    
-    if (indicatorHandle == INVALID_HANDLE || regressionIndicatorHandle == INVALID_HANDLE)
-    {
-        Print("Failed to initialize WaveTrend or Regression Channel indicator. Error: ", GetLastError());
-        return INIT_FAILED;
-    }    
-    Print("WaveTrend and Regression Channel Indicators Initialized");
-    currentLotSize = lot;
-    return INIT_SUCCEEDED; // Initialization successful
+   OutputInitializzationVariables();
+   indicatorHandle = iCustom(Symbol(), timeFrame, "WT");    // Initialize the indicator handle for WaveTrend and Regression Channel
+   regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
+   
+   if (indicatorHandle == INVALID_HANDLE || regressionIndicatorHandle == INVALID_HANDLE)
+   {
+     Print("Failed to initialize WaveTrend or Regression Channel indicator. Error: ", GetLastError());
+     return INIT_FAILED;
+   }    
+   Print("WaveTrend and Regression Channel Indicators Initialized");
+   currentLotSize = lot;
+   
+   // Open the file in CSV write mode
+   /*fileHandle = FileOpen(logFileName, FILE_CSV | FILE_WRITE | FILE_COMMON, ";");
+   if (fileHandle < 0)
+   {
+     Print("Error opening log file: ", GetLastError());
+     return INIT_FAILED;
+   }
+   
+   // Write the header to the log file
+   FileWrite(
+      fileHandle, 
+      "Time", 
+      "Symbol", 
+      "Direction",
+      "Distance", 
+      "WT1_P", 
+      "WT2_P",
+      "WT1_C", 
+      "WT2_C",
+      "Upper"
+      "Lower",
+      "ConditionMet"
+   );*/
+   
+   return INIT_SUCCEEDED; // Initialization successful
 }
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
-  {
-    // Release the indicator handles
-    if (indicatorHandle != INVALID_HANDLE)
-    {
-        IndicatorRelease(indicatorHandle);
-        indicatorHandle = INVALID_HANDLE;
-    }
-    if (regressionIndicatorHandle != INVALID_HANDLE)
-    {
-        IndicatorRelease(regressionIndicatorHandle);
-        regressionIndicatorHandle = INVALID_HANDLE;
-    }
-  }
+{
+    if (indicatorHandle != INVALID_HANDLE) IndicatorRelease(indicatorHandle);
+    if (regressionIndicatorHandle != INVALID_HANDLE) IndicatorRelease(regressionIndicatorHandle);
+    if (fileHandle >= 0) FileClose(fileHandle);
+}
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
@@ -74,11 +100,11 @@ void OnTick()
     if (multiplierFlag)
       CheckLastTradeClosed();
      // Fetch WaveTrend indicator values and Regression Channel indicator values
-    double wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current, upperLineCurrent, lowerLineCurrent;
-    if (!CopyWaveTrendValues(wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current) && !CopyRegressionValues(upperLineCurrent, lowerLineCurrent))
+    double wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current, upperLineCurrent, lowerLineCurrent, distanceCurrent;
+    if (!CopyWaveTrendValues(wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current) && !CopyRegressionValues(upperLineCurrent, lowerLineCurrent, distanceCurrent))
         return;
     
-    CheckTradeConditions(wt1Current, wt1Previous, wt2Current, wt2Previous, osLevel1Current, obLevel1Current);
+    CheckTradeConditions(wt1Current, wt1Previous, wt2Current, wt2Previous, osLevel1Current, obLevel1Current, distanceCurrent);
    
   }
 //+------------------------------------------------------------------+
@@ -86,31 +112,37 @@ void OnTick()
 //| Expert Advisor logic indicator functions                         |
 //+------------------------------------------------------------------+
 void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Current, double wt2Previous, 
-                          double osCurrent, double obCurrent)
+                          double osCurrent, double obCurrent, double distanceCurrent)
 {
     double currentHigh = iHigh(Symbol(), timeFrame, 0);
     double currentLow = iLow(Symbol(), timeFrame, 0);
     double upperCurrentPrice = ObjectGetValueByTime(0, "LinRegUpperLine", iTime(Symbol(), timeFrame, 0));
     double lowerCurrentPrice = ObjectGetValueByTime(0, "LinRegLowerLine", iTime(Symbol(), timeFrame, 0));
     bool wt1CrossOver = (wt1Current > wt2Current && wt1Previous < wt2Previous);
-    bool wt1CrossUnder = (wt1Current < wt2Current && wt1Previous > wt2Previous);    
-    
-    int currentBarIndex = Bars(_Symbol, timeFrame);
+    bool wt1CrossUnder = (wt1Current < wt2Current && wt1Previous > wt2Previous);
+    datetime prevCandleTime = iTime(Symbol(), timeFrame, 1);
+ 
+    int currentBarIndex = Bars(_Symbol, timeFrame) - 1;
     
     if (wt1Current > obCurrent && currentHigh > upperCurrentPrice  && preSellBarIndex == -1) {
          preSellSignal = true;
          preSellBarIndex = currentBarIndex;
-         DrawShape("preSellSignal", iTime(_Symbol, timeFrame, 0), currentLow + (300 * _Point), clrRed, 13);
+         //FileWrite(fileHandle, prevCandleTime, _Symbol, "SELL", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 > OB");
+         //UpdateChartComment("TRADE to OPEN: SELL \nWT1 > OB -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
     }
     else if (wt1Current < osCurrent && currentLow < lowerCurrentPrice && preBuyBarIndex == -1) {
          preBuySignal = true;
          preBuyBarIndex = currentBarIndex;
-         DrawShape("preBuySignal", iTime(_Symbol, timeFrame, 0), currentHigh + (300 * _Point), clrGreen, 13);
+         
+         //FileWrite(fileHandle, prevCandleTime, _Symbol, "BUY", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 < OS");
+         //UpdateChartComment("TRADE to OPEN: BUY \nWT1 < OS -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
     }
     
     if (preBuySignal && currentBarIndex - preBuyBarIndex <= candleLenght) {
-         if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {  
-            OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER");
+         if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {
+            //FileWrite(fileHandle, prevCandleTime, _Symbol, "BUY", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 > WT2");
+            //UpdateChartComment("WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+            OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER", distanceCurrent);
             preBuySignal = false;
             openedBuySignal = true;
             preBuyBarIndex = -1;
@@ -122,8 +154,10 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     }
     
     if (preSellSignal && currentBarIndex - preSellBarIndex <= candleLenght) {
-         if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {  
-            OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER");
+         if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {
+            //FileWrite(fileHandle, prevCandleTime, _Symbol, "SELL", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 < WT2");
+            //UpdateChartComment("WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+            OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER", distanceCurrent);
             preSellSignal = false;
             openedSellSignal = true;
             preSellBarIndex = -1;
@@ -134,6 +168,7 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
          preSellBarIndex = -1;
     }      
 }
+
 bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     int totalPositions = PositionsTotal();
     for (int i=0; i<totalPositions; i++) {
@@ -143,96 +178,59 @@ bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     return false;
 }
 
-ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment)
+ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double distanceCurrent)
 {
-    // Check if a trade of the same type is already active
-    if (currentLotSize >= lotSizeLimit && lotSizeLimitFlag)
-    {
-        Print("Trade of this type is already active. Skipping trade.");
-        return 0; // Skip opening a new trade
-    }
+   int    digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS); // Decimal places
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);         // Point size
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK); 
+   double price = (type == ORDER_TYPE_BUY) ? ask : bid;
 
-    MqlTradeRequest request = {};
-    MqlTradeResult result = {};
-    MqlTick latestPrice;
+   // Get the Stops Level (minimum stop distance in points)
+   int stopsLevel = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   if (stopsLevel < 0) stopsLevel = 0; // If unavailable, default to 0
+   
+   // Adjust SL and TP to meet the stops level requirement
+   double stopLoss = (type == ORDER_TYPE_BUY) 
+                     ? NormalizeDouble(price - MathMax(SL * point, stopsLevel * point), digits)
+                     : NormalizeDouble(price + MathMax(SL * point, stopsLevel * point), digits);
+                     
+   double takeProfit = (type == ORDER_TYPE_BUY) 
+                       ? NormalizeDouble(price + MathMax(TP * point, stopsLevel * point), digits)
+                       : NormalizeDouble(price - MathMax(TP * point, stopsLevel * point), digits);
 
-    // Check if trading is allowed on this symbol
-    if (!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE))
-    {
-        Print("Trading not allowed on symbol: ", _Symbol);
-        return 0;
-    }
-
-    // Get the last price quote
-    if (!SymbolInfoTick(_Symbol, latestPrice))
-    {
-        Print("Error getting the latest price quote - error:", GetLastError());
-        return 0;
-    }
-
-    double price = (type == ORDER_TYPE_BUY) ? NormalizeDouble(latestPrice.ask, _Digits) : NormalizeDouble(latestPrice.bid, _Digits);
-
-    // Set Stop Loss and Take Profit, ensuring minimum distance from price
-    double stopLoss = (type == ORDER_TYPE_BUY) ? NormalizeDouble(price - sl * _Point, _Digits) : NormalizeDouble(price + sl * _Point, _Digits);
-    double takeProfit = (type == ORDER_TYPE_BUY) ? NormalizeDouble(price + tp * _Point, _Digits): NormalizeDouble(price - tp * _Point, _Digits);
-    // Ensure SL/TP respect the broker's minimum stop level
-    
-    double minStopLevel = GetMinimumStopLevel();
-    if (type == ORDER_TYPE_BUY)
-    {
-        if ((price - stopLoss) < minStopLevel)
-            stopLoss = NormalizeDouble(price - minStopLevel, _Digits);
-        if ((takeProfit - price) < minStopLevel)
-            takeProfit = NormalizeDouble(price + minStopLevel, _Digits);
-    }
-    else if (type == ORDER_TYPE_SELL)
-    {
-        if ((stopLoss - price) < minStopLevel)
-            stopLoss = NormalizeDouble(price + minStopLevel, _Digits);
-        if ((price - takeProfit) < minStopLevel)
-            takeProfit = NormalizeDouble(price - minStopLevel, _Digits);
-    }
-    // Log trade details for debugging purposes
-    Print("Preparing to open trade. Type: ", type, ", Price: ", price, ", SL: ", stopLoss, ", TP: ", takeProfit, " Digit: ", _Digits);
-
-    // Initialize trade request parameters
-    request.action = TRADE_ACTION_DEAL;
-    request.symbol = _Symbol;
-    request.volume = volume;
-    request.type = type;
-    request.price = price;
-    request.sl = stopLoss;
-    request.tp = takeProfit;
-    request.type_filling = ORDER_FILLING_FOK;
-    request.comment = comment;
-    request.deviation = maxDeviation;
-
-    // Send the trade request and handle result
-    if (!OrderSend(request, result))
-    {
-        Print("Failed to send order - Error: ", GetLastError());
-        PrintFormat("retcode=%u  deal=%I64u  order=%I64u ", result.retcode, result.deal, result.order);
-        ResetLastError();
-        return 0;
-    }
-    if (result.retcode == TRADE_RETCODE_DONE) {
-        Print("Trade opened successfully - Ticket: ", result.order);
-        return result.order;
-    } else {
-        Print("Order failed - Retcode: ", result.retcode);
-    }
-    return 0;
+   // Ensure trading is allowed and check lot size limits
+   if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || (currentLotSize >= lotSizeLimit && lotSizeLimitFlag) || ((distanceCurrent < distanceThresold) && distanceCheck == true))
+   {
+       Print("Trading not allowed or lot size exceeds limit on symbol: ", _Symbol);
+       return 0;
+   }
+   // Place the trade
+   if (type == ORDER_TYPE_BUY) 
+   {
+       if (!trade.Buy(volume, _Symbol, price, stopLoss, takeProfit, comment))
+       {
+           Print("Buy() method failed. Return code=", trade.ResultRetcode(),". Code description: ", trade.ResultRetcodeDescription());
+       }
+       else
+       {
+           Print("Buy() method executed successfully. Return code=", trade.ResultRetcode()," (", trade.ResultRetcodeDescription(), ")");
+       }
+   } 
+   else if (type == ORDER_TYPE_SELL) 
+   {
+       if (!trade.Sell(volume, _Symbol, price, stopLoss, takeProfit, comment))
+       {
+           Print("Sell() method failed. Return code=", trade.ResultRetcode(),". Code description: ", trade.ResultRetcodeDescription());
+       }
+       else
+       {
+           Print("Sell() method executed successfully. Return code=", trade.ResultRetcode()," (", trade.ResultRetcodeDescription(), ")");
+       }
+   }
+   return 0;
 }
-double GetMinimumStopLevel()
-{
-    int stopLevelPoints = (int)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
-    if (stopLevelPoints == INVALID_HANDLE)
-    {
-        Print("Error fetching stop level - ", GetLastError());
-        return 0;
-    }
-    return stopLevelPoints * _Point; // Convert points to price
-}
+
 void CheckLastTradeClosed() {
    datetime endTime = TimeCurrent(); 
    datetime startTime = endTime - 5 * 60;
@@ -285,12 +283,13 @@ bool CopyWaveTrendValues(double &wt1Current, double &wt1Previous, double &wt2Cur
 }
 
 // Helper function to copy Regression Channel values
-bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent)
+bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent, double &distanceCurrent)
 {
-    double upperLineArray[], lowerLineArray[];
+    double upperLineArray[], lowerLineArray[], distanceArray[];
 
     if (CopyBuffer(regressionIndicatorHandle, 0, 0, 2, upperLineArray) <= 0 ||
-        CopyBuffer(regressionIndicatorHandle, 2, 0, 2, lowerLineArray) <= 0)
+        CopyBuffer(regressionIndicatorHandle, 2, 0, 2, lowerLineArray) <= 0 ||
+        CopyBuffer(regressionIndicatorHandle, 3, 0, 2, distanceArray) <= 0)
     {
         Print("Error copying Regression Channel buffer values: ", GetLastError());
         ResetLastError();
@@ -299,6 +298,7 @@ bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent)
 
     upperLineCurrent = upperLineArray[0];
     lowerLineCurrent = lowerLineArray[0];
+    distanceCurrent = distanceArray[0];
     return true;
 } 
 void DrawShape(string name, datetime time, double price, color clr, int arrowSymbol)
@@ -314,5 +314,38 @@ void DrawShape(string name, datetime time, double price, color clr, int arrowSym
         ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 2);
         ObjectSetInteger(0, arrowName, OBJPROP_ARROWCODE, arrowSymbol);
     }
+}
+
+void OutputInitializzationVariables() {
+   CSymbolInfo symbol_info;         //--- object for receiving symbol settings
+   symbol_info.Name(_Symbol);       //--- set the name for the appropriate symbol
+   symbol_info.RefreshRates();      //--- receive current rates and display
+   
+   Print(symbol_info.Name()," (",symbol_info.Description(),")","  Bid=",symbol_info.Bid(),"   Ask=",symbol_info.Ask());
+   Print("StopsLevel=",symbol_info.StopsLevel()," pips, FreezeLevel=",symbol_info.FreezeLevel()," pips");
+   Print("Digits=",symbol_info.Digits(),", Point=",DoubleToString(symbol_info.Point(),symbol_info.Digits()));
+   Print("SpreadFloat=",symbol_info.SpreadFloat(),", Spread(current)=",symbol_info.Spread()," pips");
+   Print("Limitations for trade operations: ",EnumToString(symbol_info.TradeMode())," (",symbol_info.TradeModeDescription(),")");
+   Print("Trades execution mode: ",EnumToString(symbol_info.TradeExecution())," (",symbol_info.TradeExecutionDescription(),")");
+   Print("Contract price calculation: ",EnumToString(symbol_info.TradeCalcMode())," (",symbol_info.TradeCalcModeDescription(),")");
+   Print("Standard contract size: ",symbol_info.ContractSize()," (",symbol_info.CurrencyBase(),")");
+   Print("Volume info: LotsMin=",symbol_info.LotsMin(),"  LotsMax=",symbol_info.LotsMax(),"  LotsStep=",symbol_info.LotsStep());
+   
+   trade.SetExpertMagicNumber(MagicNumber);                 //--- set available slippage in points when buying/selling 
+   trade.SetDeviationInPoints(maxDeviation);                //--- order filling mode, the mode allowed by the server should be used
+   trade.SetTypeFilling(ORDER_FILLING_IOC);                 //--- logging mode: it would be better not to declare this method at all, the class will set the best mode on its own
+   trade.LogLevel(1); 
+   trade.SetAsyncMode(true);
+}
+
+void UpdateChartComment(string newInfo)
+{
+    // Append new information to the chart comment
+    if (chartComment != "")
+        chartComment += "\n";
+    chartComment += newInfo;
+
+    // Update the comment on the chart
+    Comment(chartComment);
 }
 //+------------------------------------------------------------------+
