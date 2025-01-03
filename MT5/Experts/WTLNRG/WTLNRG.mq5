@@ -89,7 +89,7 @@ void OnDeinit(const int reason)
 {
     if (indicatorHandle != INVALID_HANDLE) IndicatorRelease(indicatorHandle);
     if (regressionIndicatorHandle != INVALID_HANDLE) IndicatorRelease(regressionIndicatorHandle);
-    if (fileHandle >= 0) FileClose(fileHandle);
+    //if (fileHandle >= 0) FileClose(fileHandle);
 }
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -200,11 +200,18 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double dist
                        : NormalizeDouble(price - MathMax(TP * point, stopsLevel * point), digits);
 
    // Ensure trading is allowed and check lot size limits
-   if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || (currentLotSize >= lotSizeLimit && lotSizeLimitFlag) || ((distanceCurrent < distanceThresold) && distanceCheck == true))
+   if ((!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE)) || ((distanceCurrent < distanceThresold) && distanceCheck == true))
    {
-       Print("Trading not allowed or lot size exceeds limit on symbol: ", _Symbol);
+       Print("Trading mode choose not allowed or distance exceeds limit on symbol: ", _Symbol);
        return 0;
    }
+   if (currentLotSize >= lotSizeLimit && lotSizeLimitFlag) {
+       Print("Trading not allowed lot size exceeds limit on symbol: ", _Symbol);
+       return 0;      
+   }
+   
+   
+   
    // Place the trade
    if (type == ORDER_TYPE_BUY) 
    {
