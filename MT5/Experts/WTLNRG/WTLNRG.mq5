@@ -21,8 +21,8 @@ input bool              multiplierFlag=true;
 input ENUM_TIMEFRAMES   timeFrame = PERIOD_M1;
 input ulong             maxDeviation = 2;
 // INDICATOR VARIABLE DEFINITION
+string                  logFileName="EA_Log.csv";
 int                     fileHandle = -1;                                // File handle
-string                  logFileName = "EA_Log.csv";                     // Log file name (stored in the MQL5/Files directory)
 int                     indicatorHandle = INVALID_HANDLE;               // WaveTrend indicator handle
 int                     regressionIndicatorHandle = INVALID_HANDLE;     // Regression channel indicator handle
 static bool             isTradeActive = false;                          // Flag to indicate if a trade is currently active
@@ -35,9 +35,6 @@ static int              preBuyBarIndex = -1;
 static int              preSellBarIndex = -1;
 int                     MagicNumber=123456;
 CTrade                  trade;
-static string           chartComment = "";                              // Global variable to store the chart comment
-static bool             commentWrittenBuy = false;                      // Tracks if the Buy comment has been written
-static bool             commentWrittenSell = false;                     // Tracks if the Sell comment has been written
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -45,8 +42,8 @@ static bool             commentWrittenSell = false;                     // Track
 int OnInit()
 {
    OutputInitializzationVariables();
-   indicatorHandle = iCustom(Symbol(), timeFrame, "WT");    // Initialize the indicator handle for WaveTrend and Regression Channel
-   regressionIndicatorHandle = iCustom(Symbol(), timeFrame, "LINEREG");
+   indicatorHandle =             iCustom(Symbol(), timeFrame, "WT");    // Initialize the indicator handle for WaveTrend and Regression Channel
+   regressionIndicatorHandle =   iCustom(Symbol(), timeFrame, "LINEREG");
    
    if (indicatorHandle == INVALID_HANDLE || regressionIndicatorHandle == INVALID_HANDLE)
    {
@@ -57,7 +54,7 @@ int OnInit()
    currentLotSize = lot;
    
    // Open the file in CSV write mode
-   /*fileHandle = FileOpen(logFileName, FILE_CSV | FILE_WRITE | FILE_COMMON, ";");
+   fileHandle = FileOpen(logFileName, FILE_CSV | FILE_WRITE, ";");
    if (fileHandle < 0)
    {
      Print("Error opening log file: ", GetLastError());
@@ -78,7 +75,7 @@ int OnInit()
       "Upper"
       "Lower",
       "ConditionMet"
-   );*/
+   );
    
    return INIT_SUCCEEDED; // Initialization successful
 }
@@ -89,7 +86,7 @@ void OnDeinit(const int reason)
 {
     if (indicatorHandle != INVALID_HANDLE) IndicatorRelease(indicatorHandle);
     if (regressionIndicatorHandle != INVALID_HANDLE) IndicatorRelease(regressionIndicatorHandle);
-    //if (fileHandle >= 0) FileClose(fileHandle);
+    if (fileHandle >= 0) FileClose(fileHandle);
 }
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -101,8 +98,10 @@ void OnTick()
       CheckLastTradeClosed();
      // Fetch WaveTrend indicator values and Regression Channel indicator values
     double wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current, upperLineCurrent, lowerLineCurrent, distanceCurrent;
-    if (!CopyWaveTrendValues(wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current) && !CopyRegressionValues(upperLineCurrent, lowerLineCurrent, distanceCurrent))
-        return;
+    if (!CopyWaveTrendValues(wt1Current, wt1Previous, wt2Current, wt2Previous, obLevel1Current, osLevel1Current))
+         return;
+    if (!CopyRegressionValues(upperLineCurrent, lowerLineCurrent, distanceCurrent))
+         return;
     
     CheckTradeConditions(wt1Current, wt1Previous, wt2Current, wt2Previous, osLevel1Current, obLevel1Current, distanceCurrent);
    
@@ -127,21 +126,17 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     if (wt1Current > obCurrent && currentHigh > upperCurrentPrice  && preSellBarIndex == -1) {
          preSellSignal = true;
          preSellBarIndex = currentBarIndex;
-         //FileWrite(fileHandle, prevCandleTime, _Symbol, "SELL", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 > OB");
-         //UpdateChartComment("TRADE to OPEN: SELL \nWT1 > OB -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+         FileWrite(fileHandle, TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS), _Symbol, "SELL", DoubleToString(distanceCurrent), DoubleToString(wt1Previous), DoubleToString(wt2Previous), DoubleToString(wt1Current), DoubleToString(wt2Current), DoubleToString(upperCurrentPrice), DoubleToString(lowerCurrentPrice), "WT1 > OB");
     }
     else if (wt1Current < osCurrent && currentLow < lowerCurrentPrice && preBuyBarIndex == -1) {
          preBuySignal = true;
          preBuyBarIndex = currentBarIndex;
-         
-         //FileWrite(fileHandle, prevCandleTime, _Symbol, "BUY", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 < OS");
-         //UpdateChartComment("TRADE to OPEN: BUY \nWT1 < OS -- " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+         FileWrite(fileHandle, TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS), _Symbol, "BUY", DoubleToString(distanceCurrent), DoubleToString(wt1Previous), DoubleToString(wt2Previous), DoubleToString(wt1Current), DoubleToString(wt2Current), DoubleToString(upperCurrentPrice), DoubleToString(lowerCurrentPrice), "WT1 > OB");
     }
     
     if (preBuySignal && currentBarIndex - preBuyBarIndex <= candleLenght) {
          if (wt1CrossOver && !(isTradeOpen(ORDER_TYPE_BUY)) && !openedBuySignal) {
-            //FileWrite(fileHandle, prevCandleTime, _Symbol, "BUY", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 > WT2");
-            //UpdateChartComment("WT1 > WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+            FileWrite(fileHandle, TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS), _Symbol, "BUY", DoubleToString(distanceCurrent), DoubleToString(wt1Previous), DoubleToString(wt2Previous), DoubleToString(wt1Current), DoubleToString(wt2Current), DoubleToString(upperCurrentPrice), DoubleToString(lowerCurrentPrice), "WT < OS and PRICE < LOWER");
             OpenTrade(ORDER_TYPE_BUY, currentLotSize, "WT < OS and PRICE < LOWER", distanceCurrent);
             preBuySignal = false;
             openedBuySignal = true;
@@ -155,8 +150,7 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
     
     if (preSellSignal && currentBarIndex - preSellBarIndex <= candleLenght) {
          if (wt1CrossUnder && !(isTradeOpen(ORDER_TYPE_SELL)) && !openedSellSignal) {
-            //FileWrite(fileHandle, prevCandleTime, _Symbol, "SELL", distanceCurrent, wt1Previous, wt2Previous, wt1Current, wt2Current, upperCurrentPrice, lowerCurrentPrice, "WT1 < WT2");
-            //UpdateChartComment("WT1 < WT2 " + TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+            FileWrite(fileHandle, TimeToString(prevCandleTime, TIME_DATE | TIME_MINUTES | TIME_SECONDS), _Symbol, "SELL", DoubleToString(distanceCurrent), DoubleToString(wt1Previous), DoubleToString(wt2Previous), DoubleToString(wt1Current), DoubleToString(wt2Current), DoubleToString(upperCurrentPrice), DoubleToString(lowerCurrentPrice), "WT > OB and PRICE > UPPER");
             OpenTrade(ORDER_TYPE_SELL, currentLotSize, "WT > OB and PRICE > UPPER", distanceCurrent);
             preSellSignal = false;
             openedSellSignal = true;
@@ -168,7 +162,6 @@ void CheckTradeConditions(double wt1Current, double wt1Previous, double wt2Curre
          preSellBarIndex = -1;
     }      
 }
-
 bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     int totalPositions = PositionsTotal();
     for (int i=0; i<totalPositions; i++) {
@@ -177,7 +170,6 @@ bool isTradeOpen(ENUM_ORDER_TYPE orderType) {
     }
     return false;
 }
-
 ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double distanceCurrent)
 {
    int    digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS); // Decimal places
@@ -210,8 +202,6 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double dist
        return 0;      
    }
    
-   
-   
    // Place the trade
    if (type == ORDER_TYPE_BUY) 
    {
@@ -237,7 +227,6 @@ ulong OpenTrade(ENUM_ORDER_TYPE type, double volume, string comment, double dist
    }
    return 0;
 }
-
 void CheckLastTradeClosed() {
    datetime endTime = TimeCurrent(); 
    datetime startTime = endTime - 5 * 60;
@@ -288,8 +277,6 @@ bool CopyWaveTrendValues(double &wt1Current, double &wt1Previous, double &wt2Cur
     osLevel1Current = osLevel1Array[0];
     return true;
 }
-
-// Helper function to copy Regression Channel values
 bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent, double &distanceCurrent)
 {
     double upperLineArray[], lowerLineArray[], distanceArray[];
@@ -307,22 +294,7 @@ bool CopyRegressionValues(double &upperLineCurrent, double &lowerLineCurrent, do
     lowerLineCurrent = lowerLineArray[0];
     distanceCurrent = distanceArray[0];
     return true;
-} 
-void DrawShape(string name, datetime time, double price, color clr, int arrowSymbol)
-{
-    // Ensure unique names for each arrow by appending the time
-    string arrowName = name + "_" + IntegerToString(time);
-    
-    // Create the arrow object on the chart
-    if (ObjectFind(0, arrowName) == -1) // Check if object already exists
-    {
-        ObjectCreate(0, arrowName, OBJ_ARROW, 0, time, price);
-        ObjectSetInteger(0, arrowName, OBJPROP_COLOR, clr);
-        ObjectSetInteger(0, arrowName, OBJPROP_WIDTH, 2);
-        ObjectSetInteger(0, arrowName, OBJPROP_ARROWCODE, arrowSymbol);
-    }
 }
-
 void OutputInitializzationVariables() {
    CSymbolInfo symbol_info;         //--- object for receiving symbol settings
    symbol_info.Name(_Symbol);       //--- set the name for the appropriate symbol
@@ -343,16 +315,5 @@ void OutputInitializzationVariables() {
    trade.SetTypeFilling(ORDER_FILLING_IOC);                 //--- logging mode: it would be better not to declare this method at all, the class will set the best mode on its own
    trade.LogLevel(1); 
    trade.SetAsyncMode(true);
-}
-
-void UpdateChartComment(string newInfo)
-{
-    // Append new information to the chart comment
-    if (chartComment != "")
-        chartComment += "\n";
-    chartComment += newInfo;
-
-    // Update the comment on the chart
-    Comment(chartComment);
 }
 //+------------------------------------------------------------------+
