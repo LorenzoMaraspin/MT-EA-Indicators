@@ -35,34 +35,48 @@ class MetatraderHandler:
 
         return results
 
-
-    def open_trade(self, trade_details, volume):
-        tick = mt5.symbol_info_tick(trade_details['symbol']) 
+    def preparation_trade(self, symbol, direction):
+        tick = mt5.symbol_info_tick(symbol)
         if tick is None:
-            self.logger.error(f"Symbol {trade_details['symbol']} not found or not available")
+            self.logger.error(f"Symbol {symbol} not found or not available")
             return
 
-        symbol_info = mt5.symbol_info(trade_details['symbol'])
+        symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
-            self.logger.error(f"Symbol {trade_details['symbol']} not found")
+            self.logger.error(f"Symbol {symbol} not found")
             return
 
         if not symbol_info.visible:
-            self.logger.info(f"Symbol {trade_details['symbol']} is not visible, trying to add it")
-            if not mt5.symbol_select(trade_details['symbol'], True):
-                self.logger.error(f"Failed to add symbol {trade_details['symbol']}")
+            self.logger.info(f"Symbol {symbol} is not visible, trying to add it")
+            if not mt5.symbol_select(symbol, True):
+                self.logger.error(f"Failed to add symbol {symbol}")
                 return
 
-        if trade_details['direction'].lower() == 'buy':
+        if direction.lower() == 'buy':
             order_type = mt5.ORDER_TYPE_BUY
             price = tick.ask
-        elif trade_details['direction'].lower() == 'sell':
+        elif direction.lower() == 'sell':
             order_type = mt5.ORDER_TYPE_SELL
+            price = tick.bid
+        elif direction.lower() == 'buy stop':
+            order_type = mt5.ORDER_TYPE_BUY_STOP
+            price = tick.ask
+        elif direction.lower() == 'sell stop':
+            order_type = mt5.ORDER_TYPE_SELL_STOP
+            price = tick.bid
+        elif direction.lower() == 'buy limit':
+            order_type = mt5.ORDER_TYPE_BUY_LIMIT
+            price = tick.ask
+        elif direction.lower() == 'sell limit':
+            order_type = mt5.ORDER_TYPE_SELL_LIMIT
             price = tick.bid
         else:
             self.logger.error("Invalid action")
             return
+        return order_type, price
 
+    def open_trade(self, trade_details, volume):
+        order_type, price = self.preparation_trade(trade_details['symbol'], trade_details['direction'])
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": trade_details['symbol'],
@@ -88,7 +102,7 @@ class MetatraderHandler:
         except Exception as e:
             self.logger.error("Exception occurred: %s", e)
 
-    def update_stoploss(self, trade_ids):
+    def update_trade (self, trade_ids, new_sl=None, new_tps=None):
         if not isinstance(trade_ids, list):
             trade_ids = [trade_ids]
 
@@ -101,22 +115,28 @@ class MetatraderHandler:
             position = position[0]
             entry_price = position.price_open
 
+            # Determine the new stoploss value
+            if new_sl is not None:
+                stoploss = new_sl
+            else:
+                stoploss = entry_price
+
+            # Determine the new takeprofit values
+            takeprofits = new_tps if new_tps is not None else position.tp
+
             request = {
                 "action": mt5.TRADE_ACTION_SLTP,
                 "symbol": position.symbol,
-                "sl": entry_price,
-                "tp": position.tp,
+                "sl": stoploss,
+                "tp": takeprofits,
                 "position": trade_id,
             }
 
             try:
                 result = mt5.order_send(request)
                 if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"Failed to update stoploss for trade ID {trade_id}, retcode = {result.retcode if result else 'None'}")
+                    self.logger.error(f"Failed to update stoploss/takeprofit for trade ID {trade_id}, retcode = {result.retcode if result else 'None'}")
                 else:
-                    self.logger.info(f"Stoploss updated to BE for trade ID {trade_id}")
+                    self.logger.info(f"Stoploss/Takeprofit updated for trade ID {trade_id}")
             except Exception as e:
-                self.logger.error(f"Exception occurred while updating stoploss for trade ID {trade_id}: {e}")
-
-    def update_trade(self):
-        pass
+                self.logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {trade_id}: {e}")
