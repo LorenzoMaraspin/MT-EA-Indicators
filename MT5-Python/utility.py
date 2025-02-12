@@ -12,8 +12,12 @@ def read_env_vars():
         'SERVER': os.environ.get('MT5_SERVER').strip(),
         'TP_MANAGEMENT': {
             3: [2,3],
+            4: [3, 4],
             5: [3,5],
+            6: [4, 5, 6],
             7: [5,6,7],
+            8: [6, 7, 8],
+            9: [7, 8, 9],
             10: [8,9,10]
         },
         'VANTAGE_SYMBOL_MAP':{
@@ -22,11 +26,21 @@ def read_env_vars():
             'XAUUSD':'XAUUSD+'
         }
     }
-    config['TG'] = {
+    config['TG_PROD'] = {
+        'ID': os.environ.get('TELEGRAM_M_API_ID'),
+        'HASH': os.environ.get('TELEGRAM_M_API_HASH'),
+        'PHONE': os.environ.get('TELEGRAM_M_PHONE'),
+        'SESSION': os.environ.get('TELEGRAM_M_SESSION'),
+        'CHANNELS': [int(channel) for channel in os.environ.get('TELEGRAM_M_CHANNELS').split(',')]
+    }
+    config['TG_DEV'] = {
         'ID': os.environ.get('TELEGRAM_API_ID'),
         'HASH': os.environ.get('TELEGRAM_API_HASH'),
-        'PHONE': os.environ.get('TELEGRAM_PHONE')
+        'PHONE': os.environ.get('TELEGRAM_PHONE'),
+        'SESSION': os.environ.get('TELEGRAM_SESSION'),
+        'CHANNELS': [int(channel) for channel in os.environ.get('TELEGRAM_CHANNELS').split(',')]
     }
+    config['ENV'] = os.environ.get('ENVIRONMENT')
 
     return config
 
