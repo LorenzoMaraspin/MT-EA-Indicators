@@ -26,12 +26,13 @@ class MetatraderHandler:
     def shutdown_mt5(self):
         mt5.shutdown()
 
-    def open_multiple_trades(self, trades):
+    def open_multiple_trades(self, trades, minimu_trade_count):
         results = []
-        trades_len = len(trades) if len(trades) > 1 else 2
+
+        trades_len = len(trades) if len(trades) > 1 else minimu_trade_count
         for i in range(trades_len):
             element = trades[i] if len(trades) > 1 else trades[0]
-            results.append(self.open_trade(element, 0.1))
+            results.append(self.open_trade(element))
 
         return results
 
@@ -75,12 +76,12 @@ class MetatraderHandler:
             return
         return order_type, price
 
-    def open_trade(self, trade_details, volume):
+    def open_trade(self, trade_details):
         order_type, price = self.preparation_trade(trade_details['symbol'], trade_details['direction'])
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": trade_details['symbol'],
-            "volume": float(volume),
+            "volume": float(trade_details['volume']),
             "type": order_type,
             "price": float(price),
             "sl": float(trade_details['SL']),
@@ -127,8 +128,8 @@ class MetatraderHandler:
             request = {
                 "action": mt5.TRADE_ACTION_SLTP,
                 "symbol": position.symbol,
-                "sl": stoploss,
-                "tp": takeprofits,
+                "sl": float(stoploss),
+                "tp": float(takeprofits),
                 "position": trade_id,
             }
 
@@ -140,3 +141,10 @@ class MetatraderHandler:
                     self.logger.info(f"Stoploss/Takeprofit updated for trade ID {trade_id}")
             except Exception as e:
                 self.logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {trade_id}: {e}")
+
+    def get_account_balance(self):
+        account_info = mt5.account_info()
+        if account_info is None:
+            self.logger.error("Failed to get account info, error code = %s", mt5.last_error())
+            return None
+        return account_info.balance

@@ -31,11 +31,10 @@ async def handle_new_message(event):
         if "BE" in parsed_message and parsed_message["BE"]:
             metatraderHandler.update_trade(json.loads(redis_client.get(f'{chat_id}_{event.message.id}_trades_id')))
         else:
-            trades_dict = create_trade_dicts(parsed_message, config['MT5']['TP_MANAGEMENT'],
-                                             config['MT5']['VANTAGE_SYMBOL_MAP'])
+            trades_dict = create_trade_dicts(parsed_message, config)
             redis_client.set(f'{chat_id}_{event.message.id}_message_id', event.message.id)
             redis_client.set(f'{chat_id}_{event.message.id}_message_text', json.dumps(parsed_message))
-            redis_client.set(f'{chat_id}_{event.message.id}_trades_id',json.dumps(metatraderHandler.open_multiple_trades(trades_dict)))
+            redis_client.set(f'{chat_id}_{event.message.id}_trades_id',json.dumps(metatraderHandler.open_multiple_trades(trades_dict,config['MT5']['TRADE_MANAGEMENT'][parsed_message['symbol']]['default_trades'])))
     else:
         logger.error("Invalid message")
 
@@ -48,13 +47,14 @@ async def handle_edited_message(event):
     message_text = json.loads(redis_client.get(f'{chat_id}_{message_id}_message_text'))
     message_text_edited = event.message.message
     if (message_id == event.message.id) and (message_text is not None) and (message_text_edited != message_text):
-        date = parse_message(message_text_edited)
-        modified = find_modified_properties(date, message_text)
+        parsed_message = parse_message(message_text_edited)
+        modified = find_modified_properties(parsed_message, message_text)
         if modified:
             logger.info(f"Modified properties: {modified}")
             sl = modified['SL'][0] if 'SL' in modified else None
             tps =  {key: value[0] for key, value in modified['TPs'].items()} if 'TPs' in modified else None
             metatraderHandler.update_trade(json.loads(redis_client.get(f'{chat_id}_{message_id}_trades_id')), new_sl=sl, new_tps=tps)
+            redis_client.set(f'{chat_id}_{event.message.id}_message_text', json.dumps(parsed_message))
         else:
             logger.info("No modified properties")
 
@@ -75,4 +75,5 @@ async def get_channel_history(channel_id, limit=100):
 
 # Run the function
 client.start()
+
 client.run_until_disconnected()

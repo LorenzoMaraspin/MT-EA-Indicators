@@ -20,10 +20,17 @@ def read_env_vars():
             9: [7, 8, 9],
             10: [8,9,10]
         },
-        'VANTAGE_SYMBOL_MAP':{
-            'US30': 'DJ30',
-            'GOLD':'XAUUSD+',
-            'XAUUSD':'XAUUSD+'
+        'TRADE_MANAGEMENT': {
+            'US30': {
+                "symbol": "DJ30",
+                "default_trades": 3,
+                "default_lot_size": 0.1
+            },
+            'XAUUSD': {
+                "symbol": "XAUUSD+",
+                "default_trades": 2,
+                "default_lot_size": 0.1
+            }
         }
     }
     config['TG_PROD'] = {
@@ -93,10 +100,8 @@ def find_modified_properties(dict1, dict2):
     all_keys = set(dict1.keys()).union(set(dict2.keys()))
 
     for key in all_keys:
-        if key not in dict1:
-            modified[key] = dict2[key]
-        elif key not in dict2:
-            modified[key] = dict1[key]
+        if key not in dict2:
+            modified[key] = (dict1[key], 0)
         elif dict1[key] != dict2[key]:
             if isinstance(dict1[key], dict) and isinstance(dict2[key], dict):
                 nested_modified = find_modified_properties(dict1[key], dict2[key])
@@ -108,8 +113,10 @@ def find_modified_properties(dict1, dict2):
     return modified
 
 
-def create_trade_dicts(trade_dict, tp_config, symbol_config):
+def create_trade_dicts(trade_dict, config):
     tps = trade_dict.get('TPs', {})
+    tp_config = config['MT5']['TP_MANAGEMENT']
+    symbol_config = config['MT5']['TRADE_MANAGEMENT'][trade_dict['symbol']]
     if not isinstance(tps, dict) or not tps:
         tps = {'TP0': None}
 
@@ -119,9 +126,10 @@ def create_trade_dicts(trade_dict, tp_config, symbol_config):
 
     if tp_length == 1 and tps.get('TP0') is None:
         new_trade_dict = {
-            'symbol': symbol_config.get(trade_dict['symbol'], trade_dict['symbol']),
+            'symbol': symbol_config['symbol'],
             'direction': trade_dict['direction'],
             'entry_price': trade_dict['entry_price'],
+            'volume': symbol_config['default_lot_size'],
             'SL': trade_dict['SL'] if 'SL' in trade_dict else '0',
             'TP': '0'
         }
@@ -131,9 +139,10 @@ def create_trade_dicts(trade_dict, tp_config, symbol_config):
 
         for tp_index in selected_tps:
             new_trade_dict = {
-                'symbol': symbol_config.get(trade_dict['symbol'], trade_dict['symbol']),
+                'symbol': symbol_config['symbol'],
                 'direction': trade_dict['direction'],
                 'entry_price': trade_dict['entry_price'],
+                'volume': symbol_config['default_lot_size'],
                 'SL': trade_dict['SL'] if 'SL' in trade_dict else '0',
                 'TP': tps[tp_keys[tp_index-1]] if tps[tp_keys[tp_index-1]] is not None else None
             }
