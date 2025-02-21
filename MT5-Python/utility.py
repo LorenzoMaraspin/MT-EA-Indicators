@@ -23,19 +23,19 @@ def read_env_vars():
         },
         'TRADE_MANAGEMENT': {
             'US30': {
-                "symbol": "DJ30",
+                "symbol": "US30.cash",
                 "default_trades": 3,
-                "default_lot_size": 0.1
+                "default_lot_size": 2.0
             },
             'XAUUSD': {
-                "symbol": "XAUUSD+",
+                "symbol": "XAUUSD",
                 "default_trades": 2,
-                "default_lot_size": 0.1
+                "default_lot_size": 0.5
             },
             'XAU': {
-                "symbol": "XAUUSD+",
+                "symbol": "XAUUSD",
                 "default_trades": 2,
-                "default_lot_size": 0.1
+                "default_lot_size": 0.5
             }
         }
     }
