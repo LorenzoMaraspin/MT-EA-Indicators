@@ -1,0 +1,71 @@
+"US30 SELL @  44175
+SL- 53456
+
+TP1- 44140
+
+TP2- 44155
+
+TP3- 44170
+
+TP4- 44185
+
+Post News Trade 📰
+High Risk Trade"
+
+"XAUUSD SELL @  44175
+SL- 53456
+
+TP1- 44140
+
+TP2- 44155
+
+TP3- 44170
+
+TP4- 44185
+
+Post News Trade 📰
+High Risk Trade"
+
+"Xau buy limit 2354"
+
+"XAUUSD sell stop 2354"
+
+"GOLD buy 2354
+stoploss 2222"
+
+"GOLD buy 2354
+SL - 2222"
+
+"XAUUSD buy 2354
+SL 2222"
+
+"XAU buy 2354
+sl 2222"
+
+"XAU buy 2354
+sl 2222
+
+TP1- 44140
+
+TP2- 44155"
+
+"XAU buy 2354
+sl 2222
+
+TP1: 44140
+
+TP2: 44155"
+
+"XAU buy @ 2354
+sl 2222
+
+TP1 - 44140
+
+TP2 - 44155"
+"Move SL at BE, Risk Free"
+"Move stop loss at BE, Risk Free"
+"Move stop loss at break even, Risk Free"
+"mettere a BE"
+"mettere a break even"
+"break even"
+"Stoploss a prezzo d'entrata"

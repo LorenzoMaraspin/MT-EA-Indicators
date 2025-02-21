@@ -1,6 +1,7 @@
+import asyncio
 import json
 import redis
-from utility import read_env_vars, parse_message, find_modified_properties, create_trade_dicts
+from utility import read_env_vars, find_modified_properties, create_trade_dicts, parse_trade_signal
 from telethon import TelegramClient, events, sync
 from metatraderHandler import MetatraderHandler
 import logging
@@ -16,7 +17,7 @@ config = read_env_vars()
 # Redis connection
 tg_key_based_on_env = "TG_DEV" if config['ENV'] == 'DEV' else "TG_PROD"
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
-client = TelegramClient(config[tg_key_based_on_env]['SESSION'], config[tg_key_based_on_env]['ID'], config[tg_key_based_on_env]['HASH'])
+client = TelegramClient(config[tg_key_based_on_env]['SESSION'], config[tg_key_based_on_env]['ID'], config[tg_key_based_on_env]['HASH'], timeout=10, retry_delay=5, request_retries=10)
 metatraderHandler = MetatraderHandler(config['MT5']['ACCOUNT'], config['MT5']['PASSWORD'], config['MT5']['SERVER'])
 destination_chat_id = -1002404066652
 # Global variable to store the parsed message
@@ -25,10 +26,10 @@ destination_chat_id = -1002404066652
 async def handle_new_message(event):
     message_text = event.message.message
     chat_id = event.chat_id
-    parsed_message = parse_message(message_text)
+    parsed_message = parse_trade_signal(message_text)
     await client.forward_messages(destination_chat_id, event.message)
     if parsed_message is not None:
-        if "BE" in parsed_message and parsed_message["BE"]:
+        if "break_even" in parsed_message and parsed_message["break_even"]:
             metatraderHandler.update_trade(json.loads(redis_client.get(f'{chat_id}_{event.message.id}_trades_id')))
         else:
             trades_dict = create_trade_dicts(parsed_message, config)
@@ -42,12 +43,12 @@ async def handle_new_message(event):
 @client.on(events.MessageEdited(chats=config[tg_key_based_on_env]['CHANNELS']))
 async def handle_edited_message(event):
     message_id = event.message.id
+    message_text = event.message.message
     chat_id = event.chat_id
-    message_id = int(redis_client.get(f'{chat_id}_{message_id}_message_id'))
-    message_text = json.loads(redis_client.get(f'{chat_id}_{message_id}_message_text'))
-    message_text_edited = event.message.message
-    if (message_id == event.message.id) and (message_text is not None) and (message_text_edited != message_text):
-        parsed_message = parse_message(message_text_edited)
+    cache_message_id = int(redis_client.get(f'{chat_id}_{message_id}_message_id'))
+    cache_message_text = json.loads(redis_client.get(f'{chat_id}_{message_id}_message_text'))
+    if (cache_message_id == event.message.id) and (cache_message_text is not None) and (message_text != cache_message_text):
+        parsed_message = parse_trade_signal(message_text)
         modified = find_modified_properties(parsed_message, message_text)
         if modified:
             logger.info(f"Modified properties: {modified}")
@@ -73,7 +74,29 @@ async def get_channel_history(channel_id, limit=100):
     messages_count = len(messages_dict)
     return json.dumps({"messages": messages_dict, "count": messages_count})
 
-# Run the function
-client.start()
+async def keep_alive():
+    while True:
+        if not client.is_connected():
+            logging.warning("Client disconnesso, tentando la riconnessione...")
+            await client.connect()
+        await asyncio.sleep(30)  # Controlla ogni 30 secondi
 
-client.run_until_disconnected()
+async def main():
+    while True:
+        try:
+            await client.connect()
+            if not await client.is_user_authorized():
+                await client.send_code_request(config[tg_key_based_on_env]['PHONE'])
+                await client.sign_in(config[tg_key_based_on_env]['PHONE'], input("Inserisci il codice: "))
+
+            print("Bot avviato!")
+            await client.run_until_disconnected()  # Mantiene il client attivo
+        except (ConnectionError, asyncio.TimeoutError, OSError) as e:
+            logging.warning(f"Errore di connessione: {e}, riavvio in 5 secondi...")
+            await asyncio.sleep(5)  # Aspetta qualche secondo prima di riconnettersi
+
+# Run the function
+with client:
+    client.start()
+    client.loop.create_task(keep_alive())
+    client.loop.run_until_complete(main())
