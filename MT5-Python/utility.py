@@ -28,12 +28,12 @@ def read_env_vars():
                 "default_lot_size": 2.0
             },
             'XAUUSD': {
-                "symbol": "XAUUSD",
+                "symbol": "XAUUSD+",
                 "default_trades": 2,
                 "default_lot_size": 0.5
             },
             'XAU': {
-                "symbol": "XAUUSD",
+                "symbol": "XAUUSD+",
                 "default_trades": 2,
                 "default_lot_size": 0.5
             }
@@ -70,7 +70,7 @@ def parse_trade_signal(text):
     patterns = {
         'symbol': r'(?P<symbol>[A-Za-z0-9]+)\s+(?P<direction>BUY|SELL|BUY LIMIT|BUY STOP|SELL LIMIT|SELL STOP)\s*@?\s*(?P<entry_price>\d+\.?\d*)',
         'stop_loss': r'(?:SL|stoploss|sl)\s*-?\s*(\d+\.?\d*)',
-        'take_profits': r'(?:TP\d+|TP)[:\-]?\s*(\d+\.?\d*)',
+        'take_profits': r'TP\d+\s*[-:]\s*(\d+\.?\d*)',
         'break_even': r'\b(?:BE|Break Even|Risk Free|Stoploss a prezzo d\'entrata|mettere a BE|mettere a break even|Move SL at BE|Move stop loss at BE|Move stop loss at break even)\b'
     }
 

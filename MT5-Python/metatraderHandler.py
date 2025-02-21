@@ -83,6 +83,7 @@ class MetatraderHandler:
             "symbol": trade_details['symbol'],
             "volume": float(trade_details['volume']),
             "type": order_type,
+            "price": float(price),
             "sl": float(trade_details['SL']),
             "tp": float(trade_details['TP']),
             "comment": "Trade from Telegram",
