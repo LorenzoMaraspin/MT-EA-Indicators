@@ -163,7 +163,8 @@ class MetatraderHandler:
         if not isinstance(trade_ids, list):
             trade_ids = [trade_ids]
 
-        for trade_id in trade_ids:
+        for i in range (0,len(trade_ids),1):
+            trade_id = trade_ids[i]
             position = mt5.positions_get(ticket=trade_id)
             if not position:
                 logger.error(f"Position with trade ID {trade_id} not found.")
@@ -171,7 +172,7 @@ class MetatraderHandler:
 
             position = position[0]
             stoploss = new_sl if new_sl is not None else position.sl
-            takeprofits = new_tps if new_tps is not None else position.tp
+            takeprofits = new_tps[len(new_tps) - 1 - i] if new_tps is not None else position.tp
 
             request = {
                 "action": mt5.TRADE_ACTION_SLTP,

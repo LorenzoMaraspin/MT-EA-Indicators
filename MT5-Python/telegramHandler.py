@@ -63,7 +63,7 @@ class TelegramHandler:
         message_id = event.message.id
         message_text = event.message.message
         chat_id = event.chat_id
-
+        await self.client.forward_messages(self.destination_chat_id, event.message)
         cache_message_id = int(self.redis_client.get(f'{chat_id}_{message_id}_message_id'))
         cache_message_text = json.loads(self.redis_client.get(f'{chat_id}_{message_id}_message_text'))
 
@@ -74,7 +74,7 @@ class TelegramHandler:
             if modified:
                 logger.info(f"Modified properties: {modified}")
                 sl = modified['stop_loss'][0] if 'stop_loss' in modified else None
-                tps = {key: value[0] for key, value in modified['take_profits'].items()} if 'take_profits' in modified else None
+                tps = modified['take_profits'][0] if 'take_profits' in modified else None
                 trade_id = json.loads(self.redis_client.get(f'{chat_id}_{message_id}_trades_id'))
                 self.metatraderHandler.update_trade(trade_id, new_sl=sl, new_tps=tps)
                 self.redis_client.set(f'{chat_id}_{event.message.id}_message_text', json.dumps(parsed_message))

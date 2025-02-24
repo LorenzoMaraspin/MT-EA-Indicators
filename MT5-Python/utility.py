@@ -23,7 +23,7 @@ def read_env_vars():
         },
         'TRADE_MANAGEMENT': {
             'US30': {
-                "symbol": "US30.cash",
+                "symbol": "DJ30",
                 "default_trades": 3,
                 "default_lot_size": 2.0
             },
@@ -140,7 +140,7 @@ def create_trade_dicts(trade_dict, config):
             'direction': trade_dict['direction'],
             'entry_price': trade_dict['entry_price'],
             'volume': symbol_config['default_lot_size'],
-            'SL': trade_dict['stop_loss'] if 'stop_loss' in trade_dict else '0',
+            'SL': trade_dict['stop_loss'] if 'stop_loss' in trade_dict and trade_dict['stop_loss'] is not None else '0',
             'TP': '0'
         }
         trade_dicts.append(new_trade_dict)
@@ -153,8 +153,8 @@ def create_trade_dicts(trade_dict, config):
                 'direction': trade_dict['direction'],
                 'entry_price': trade_dict['entry_price'],
                 'volume': symbol_config['default_lot_size'],
-                'SL': trade_dict['stop_loss'] if 'stop_loss' in trade_dict else '0',
-                'TP': tps[tp_index-1] if tps[tp_index-1] is not None else None
+                'SL': trade_dict['stop_loss'] if 'stop_loss' in trade_dict and trade_dict['stop_loss'] is not None else '0',
+                'TP': tps[tp_index-1] if tps[tp_index-1] is not None else '0'
             }
             trade_dicts.append(new_trade_dict)
 
