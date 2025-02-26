@@ -8,6 +8,8 @@ from telegramHandler import TelegramHandler
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
 
+# -1001426601424, -1001467277459
+
 async def main():
     """Main function to run the application."""
     config = read_env_vars()

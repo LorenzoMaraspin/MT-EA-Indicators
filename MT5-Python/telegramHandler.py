@@ -19,6 +19,7 @@ class TelegramHandler:
 
         # Telegram client setup
         self.tg_key_based_on_env = "TG_DEV" if config['ENV'] == 'DEV' else "TG_PROD"
+        #self.tg_key_based_on_env = "TG_PROD"
         self.client = TelegramClient(
             config[self.tg_key_based_on_env]['SESSION'],
             config[self.tg_key_based_on_env]['ID'],
@@ -37,12 +38,12 @@ class TelegramHandler:
         message_text = event.message.message
         chat_id = event.chat_id
         parsed_message = parse_trade_signal(message_text)
-
+        logger.info(f"Received message: {message_text}")
         # Forward the message to the destination chat
         await self.client.forward_messages(self.destination_chat_id, event.message)
 
         if parsed_message is None:
-            logger.error("Invalid message")
+            logger.error("Invalid message: {}".format(message_text))
             return
 
         if "break_even" in parsed_message and parsed_message["break_even"]:
@@ -63,6 +64,7 @@ class TelegramHandler:
         message_id = event.message.id
         message_text = event.message.message
         chat_id = event.chat_id
+        logger.info(f"Received edited message: {message_text}")
         await self.client.forward_messages(self.destination_chat_id, event.message)
         cache_message_id = int(self.redis_client.get(f'{chat_id}_{message_id}_message_id'))
         cache_message_text = json.loads(self.redis_client.get(f'{chat_id}_{message_id}_message_text'))
@@ -90,7 +92,7 @@ class TelegramHandler:
     async def get_channel_history(self, channel_id: int, limit: int = 100) -> str:
         """Retrieve message history from a channel."""
         messages = await self.client.get_messages(channel_id, limit=limit)
-        messages_dict = {index + 1: message.text.strip() for index, message in enumerate(messages)}
+        messages_dict = {index + 1: message.text for index, message in enumerate(messages)}
         return json.dumps({"messages": messages_dict, "count": len(messages_dict)})
 
     async def keep_alive(self) -> None:
@@ -108,4 +110,6 @@ class TelegramHandler:
             await self.client.send_code_request(self.config[self.tg_key_based_on_env]['PHONE'])
             await self.client.sign_in(self.config[self.tg_key_based_on_env]['PHONE'], input("Enter the code: "))
         logger.info("Telegram client started!")
+        #await self.get_channel_history(-1001426601424, 1000)
+
         await self.client.run_until_disconnected()

@@ -71,7 +71,7 @@ def parse_trade_signal(text):
         'symbol': r'(?P<symbol>[A-Za-z0-9]+)\s+(?P<direction>BUY|SELL|BUY LIMIT|BUY STOP|SELL LIMIT|SELL STOP)\s*@?\s*(?P<entry_price>\d+\.?\d*)',
         'stop_loss': r'(?:SL|stoploss|sl)\s*-?\s*(\d+\.?\d*)',
         'take_profits': r'TP\d+\s*[-:]\s*(\d+\.?\d*)',
-        'break_even': r'\b(?:BE|Break Even|Risk Free|Stoploss a prezzo d\'entrata|mettere a BE|mettere a break even|Move SL at BE|Move stop loss at BE|Move stop loss at break even)\b'
+        'break_even': r'\b(?:BE|Break Even|Risk Free|Move SL at BE|Move stop loss at BE|Move stop loss at break even)\b'
     }
 
     # Verifica se il messaggio è un'istruzione di break even
@@ -102,6 +102,9 @@ def parse_trade_signal(text):
     tp_matches = re.findall(patterns['take_profits'], text, re.IGNORECASE)
     if tp_matches:
         trade_info['take_profits'] = [float(tp) for tp in tp_matches]
+
+    if all(value in [None, []] for value in trade_info.values()):
+        return None
 
     return trade_info
 
