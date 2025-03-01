@@ -1,0 +1,48 @@
+"Xau buy 2936"
+"XAUUSD BUY @ 2936.00
+
+SL- 2930.00
+
+TP1- 2937.50
+
+TP2- 2939.00
+
+TP3- 2940.50
+
+TP4- 2942.00
+
+TP5- 2943.50"
+"Xau sell 2936"
+"XAUUSD SELL @ 2936.00
+
+SL- 2942.00
+
+TP1- 2934.50"
+"Move SL at BE"
+"Us30 sell 43645"
+"US30 SELL @ 43645
+
+SL- 43800
+
+TP1- 43630
+
+TP2- 43615
+
+TP3- 43600
+
+TP4- 43585
+
+TP5- 43570
+
+TP6- 43555
+
+TP7- 43540"
+"Close early"
+"SL 43820 reduce risk"
+"Xau sell 2879
+
+Risky trade"
+"Move SL at BE, Risk Free Trade"
+"Updated"
+"Update full position"
+"XAUUSD SL @ 2924"

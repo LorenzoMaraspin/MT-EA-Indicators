@@ -1,0 +1,6 @@
+redis
+telethon
+openai
+Metatrader5
+together
+sqlalchemy
