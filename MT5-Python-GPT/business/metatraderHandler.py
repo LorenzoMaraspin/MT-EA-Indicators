@@ -1,5 +1,6 @@
 import logging
 import MetaTrader5 as mt5
+from model.trades import Trade
 from typing import Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class MetatraderHandler:
         mt5.shutdown()
         logger.info("MetaTrader 5 shutdown successfully.")
 
-    def open_multiple_trades(self, trades: List[Dict[str, Union[str, float]]], minimum_trade_count: int) -> List[int]:
+    def open_multiple_trades(self, trades: List[Dict[str, Union[str, float]]], minimum_trade_count: int) -> List[Trade]:
         """
         Open multiple trades based on the provided trade details.
 
@@ -61,7 +62,19 @@ class MetatraderHandler:
             trade_details = trades[i] if len(trades) > 1 else trades[0]
             trade_id = self.open_trade(trade_details)
             if trade_id:
-                results.append(trade_id)
+                trade = Trade(
+                    order_id=str(trade_id),
+                    status='open',
+                    break_even=0.0,
+                    message_id=int(trade_details['db_message_id']),
+                    asset=trade_details['symbol'],
+                    type=trade_details['direction'],
+                    volume=trade_details['volume'],
+                    stop_loss=trade_details['SL'],
+                    take_profit=trade_details['TP'],
+                    entry=trade_details['entry_price']
+                )
+                results.append(trade)
 
         return results
 
@@ -149,6 +162,35 @@ class MetatraderHandler:
             return result.order
         except Exception as e:
             logger.error("Exception occurred: %s", e)
+            return None
+
+    def update_trade_break_even(self, order_id, new_sl: Optional[float] = None):
+        position = mt5.positions_get(ticket=int(order_id))
+        if not position:
+            logger.error(f"Position with trade ID {order_id} not found.")
+            return None
+
+        position = position[0]
+        stoploss = new_sl if new_sl is not None else position.price_open
+
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": position.symbol,
+            "sl": float(stoploss),
+            "position": int(order_id),
+        }
+
+        try:
+            result = mt5.order_send(request)
+            if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                logger.error(
+                    f"Failed to update stoploss/takeprofit for trade ID {order_id}, retcode = {result.retcode if result else 'None'}")
+                return None
+            else:
+                logger.info(f"Stoploss/Takeprofit updated for trade ID {order_id}")
+                return float(stoploss)
+        except Exception as e:
+            logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {order_id}: {e}")
             return None
 
     def update_trade(self, trade_ids: Union[int, List[int]], new_sl: Optional[float] = None, new_tps: Optional[float] = None) -> None:

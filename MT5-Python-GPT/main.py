@@ -1,15 +1,31 @@
+import logging
+from business.metatraderHandler import MetatraderHandler
 from data.dbHandler import dbHandler
 import asyncio
 from business.tradesAnalyzerHandler import tradesAnalyzer
 from business.telegramAnalyzer import TelegramAnalyzer
-from utility.utility import read_file, initialize_logger, read_env_vars
+from utility.utility import read_file, read_env_vars
 
-logger = initialize_logger()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("SmartTradeAnalyzer")
+logger.setLevel(logging.INFO)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 async def main():
     config = read_env_vars()
     db = dbHandler(config=config)
-    analyzer = TelegramAnalyzer(config=config, dbHandler=db)
+    metatrader = MetatraderHandler(
+        account=config['MT5']['ACCOUNT'],
+        password=config['MT5']['PASSWORD'],
+        server=config['MT5']['SERVER']
+    )
+    analyzer = TelegramAnalyzer(config=config, dbHandler=db, metatraderHandler=metatrader)
 
     while True:
         try:

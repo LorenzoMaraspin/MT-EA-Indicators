@@ -1,7 +1,7 @@
 import logging
 import os
 
-logger = logging.getLogger("telegramListener")
+logger = logging.getLogger(__name__)
 
 def read_file(file_path: str) -> str:
     try:
@@ -14,30 +14,12 @@ def read_file(file_path: str) -> str:
         logger.exception(f"Error: An I/O error occurred: {e_io}")
         raise e_io
 
-def initialize_logger():
-    # Create a logger object
-    logger.setLevel(logging.INFO)
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(formatter)
-
 def read_env_vars():
     config = {}
     config['MT5'] = {
         'ACCOUNT': int(os.environ.get('MT5_ACCOUNT')),
         'PASSWORD': os.environ.get('MT5_PASSWORD').strip(),
         'SERVER': os.environ.get('MT5_SERVER').strip(),
-        'TP_MANAGEMENT': {
-            2: [1, 2],
-            3: [2, 3],
-            4: [3, 4],
-            5: [3,5],
-            6: [4, 5, 6],
-            7: [5, 6, 7],
-            8: [6, 7, 8],
-            9: [7, 8, 9],
-            10: [8, 9, 10]
-        },
         'TRADE_MANAGEMENT': {
             'US30': {
                 "symbol": "DJ30",

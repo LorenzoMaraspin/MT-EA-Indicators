@@ -1,12 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
-
-class TradeUpdate(Base):
-    __tablename__ = 'trade_updates'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    trade_id = Column(Integer, ForeignKey('trades.id'), nullable=False)
-    update_text = Column(String, nullable=False)
-    new_value = Column(Float, nullable=False)
+class TradeUpdate():
+    def __init__(self, trade_id: int , update_text: str, new_value: int, id: int = None):
+        self.trade_id = trade_id
+        self.update_text = update_text
+        self.new_value = new_value
+        self.id = id

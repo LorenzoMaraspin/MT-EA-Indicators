@@ -45,12 +45,31 @@ class TelegramAnalyzer:
         if not self.prefilter_message(text):
             logger.error(f"❌ Invalid message: {text}")
             return
+
         message = Message(telegram_id=event.message.id, chat_id=event.chat_id, timestamp=event.message.date, text=text, processed=False)
-        self.dbHandler.insert_message(message)
         parsed_text = self.extract_trade_data(text)
-        logger.info(f"📨 Parsed text: {parsed_text}")
-        trades = self.create_trade_dicts(parsed_text)
-        print(trades)
+
+        if parsed_text['message_type'] == 'create':
+            db_message_id = self.dbHandler.insert_message(message)
+            trades = self.create_trade_dicts(parsed_text, db_message_id)
+            trade_results = self.metatraderHandler.open_multiple_trades(trades, self.config['MT5']['TRADE_MANAGEMENT'][parsed_text['symbol']]['default_trades'])
+            for trade in trade_results:
+                self.dbHandler.insert_trade(trade)
+            message.processed = True
+            self.dbHandler.update_message(message)
+        elif parsed_text['message_type'] == 'update':
+            trades_to_update = self.dbHandler.get_latest_message_with_trades()
+            for item in trades_to_update:
+                sl = parsed_text['stop_loss'] if parsed_text['stop_loss'] is not None and parsed_text['stop_loss'] != 0 else None
+                response_be = self.metatraderHandler.update_trade_break_even(item.order_id, sl)
+                if response_be is not None:
+                    trade_updates = TradeUpdate(item.id, str(text), 0)
+                    self.dbHandler.insert_trade_update(trade_updates)
+                    item.stop_loss = response_be
+                    item.break_even = response_be
+                    self.dbHandler.update_trade(item)
+        else:
+            logger.error(f"❌ Invalid message type: {parsed_text}")
 
     async def handle_edited_message(self, event: events.NewMessage.Event) -> None:
         edited_text = event.message.message
@@ -60,6 +79,17 @@ class TelegramAnalyzer:
         existing_message = self.dbHandler.get_message_by_id(event.message.id, event.chat_id)
         message = Message(telegram_id=event.message.id, chat_id=event.chat_id, timestamp=event.message.date, text=edited_text, processed=False)
         parsed_text = self.extract_trade_data(edited_text)
+
+        if parsed_text['message_type'] == 'create':
+            trades = self.create_trade_dicts(parsed_text, existing_message.id)
+            existing_trades = self.dbHandler.get_trades_by_id(existing_message.id)
+            trade_results = self.metatraderHandler.open_multiple_trades(trades, self.config['MT5']['TRADE_MANAGEMENT'][parsed_text['symbol']]['default_trades'])
+            for trade in trade_results:
+                self.dbHandler.insert_trade(trade)
+        elif parsed_text['message_type'] == 'update':
+            pass
+        else:
+            logger.error(f"❌ Invalid message type: {parsed_text}")
 
     def prefilter_message(self, message: str) -> bool:
         """Prefilter the message to remove unwanted characters."""
@@ -84,7 +114,6 @@ class TelegramAnalyzer:
         except Exception as e:
             return False
 
-
     def extract_trade_data(self, message: str) -> Optional[Dict[str, Any]]:
         """Extract trade data from the message."""
         patterns = {
@@ -93,8 +122,8 @@ class TelegramAnalyzer:
             'take_profits': r'TP\d+\s*[-:]\s*(\d+\.?\d*)',
             'break_even': r'\b(?:BE|Break Even|Risk Free|Move SL at BE|Move stop loss at BE|Move stop loss at break even|Updated|Update full position|Close early|SL\s*[0-9]+\s*reduce risk|All SL \d+|[A-Za-z]{3,6}\s*SL\s*@\s*\d+)\b'
         }
-        trade_info = {}
         break_even_match = re.search(patterns['break_even'], message, re.IGNORECASE)
+        trade_info = {}
         if break_even_match:
             trade_info['break_even'] = True
             trade_info['message_type'] = 'update'
@@ -102,13 +131,15 @@ class TelegramAnalyzer:
             parts = break_even_match.group(0).split()
             if parts:
                 trade_info['symbol'] = str(parts[0]).upper() if re.match(r'^[A-Z]{3,6}$', parts[0]) else None
-                trade_info['stop_loss'] = float(parts[-1]) if parts[-1].replace('.', '', 1).isdigit() else None
+                trade_info['stop_loss'] = float(parts[-1]) if parts[-1].replace('.', '', 1).isdigit() else 0
+
+            return trade_info
 
         trade_info = {
             'symbol': None,
             'direction': None,
-            'entry_price': None,
-            'stop_loss': None,
+            'entry_price': 0,
+            'stop_loss': 0,
             'take_profits': [],
             'message_type': None
         }
@@ -134,9 +165,11 @@ class TelegramAnalyzer:
         if all(value in [None, []] for value in trade_info.values()):
             return None
 
+        logger.info(f"📨 Parsed text: {trade_info}")
+
         return trade_info
 
-    def create_trade_dicts(self, trade_dict):
+    def create_trade_dicts(self, trade_dict, message_id):
         tps = trade_dict.get('take_profits', {})
         symbol_config = self.config['MT5']['TRADE_MANAGEMENT'][trade_dict['symbol'].upper()]
 
@@ -154,6 +187,7 @@ class TelegramAnalyzer:
                 'direction': trade_dict['direction'],
                 'entry_price': trade_dict['entry_price'],
                 'volume': symbol_config['default_lot_size'],
+                'db_message_id': message_id,
                 'SL': trade_dict.get('stop_loss', '0'),
                 'TP': '0'
             }
@@ -172,6 +206,7 @@ class TelegramAnalyzer:
                     'direction': trade_dict['direction'],
                     'entry_price': trade_dict['entry_price'],
                     'volume': symbol_config['default_lot_size'],
+                    'db_message_id': message_id,
                     'SL': trade_dict.get('stop_loss', '0'),
                     'TP': tp if tp is not None else '0'
                 }

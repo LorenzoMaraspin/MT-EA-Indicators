@@ -1,17 +1,39 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
+class Trade():
+    def __init__(self,
+                 message_id: int,
+                 asset: str,
+                 type: str,
+                 volume: float,
+                 stop_loss: float,
+                 take_profit: float,
+                 entry: float,
+                 break_even: float,
+                 order_id: str,
+                 status: str,
+                 id: str = None):
+        self.message_id = message_id
+        self.asset = asset
+        self.type = type
+        self.volume = volume
+        self.stop_loss = stop_loss
+        self.take_profit = take_profit
+        self.entry = entry
+        self.break_even = break_even
+        self.order_id = order_id
+        self.status = status
+        self.id = id
 
-Base = declarative_base()
-
-class Trade(Base):
-    __tablename__ = 'trades'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    message_id = Column(Integer, ForeignKey('messages.id'), nullable=False)
-    asset = Column(String, nullable=False)
-    type = Column(String, nullable=False)
-    entry = Column(Float, nullable=False)
-    break_even = Column(Float, nullable=False)
-    stop_loss = Column(Float, nullable=False)
-    take_profits = Column(String, nullable=False)
-    status = Column(String, default='open', nullable=False)
+    def to_dict(self):
+        return {
+            'message_id': self.message_id,
+            'asset': self.asset,
+            'type': self.type,
+            'volume': self.volume,
+            'stop_loss': self.stop_loss,
+            'take_profit': self.take_profit,
+            'entry': self.entry,
+            'break_even': self.break_even,
+            'order_id': self.order_id,
+            'status': self.status,
+            'id': self.id
+        }
