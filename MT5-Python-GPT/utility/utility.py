@@ -1,5 +1,6 @@
 import logging
 import os
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +66,31 @@ def read_env_vars():
     config['LLAMA_API_KEY'] = os.environ.get('LLAMA_AI_KEY')
 
     return config
+
+def compare_trades_still_open(db, metatrader):
+    all_running_trades = metatrader.get_all_position()
+    all_db_trades = db.get_all_trades()
+    all_db_trades_by_message_id = defaultdict(list)
+    for trade in all_db_trades:
+        all_db_trades_by_message_id[trade.message_id].append(trade)
+
+    found_ids = []
+    not_found_ids = []
+
+    # Check each ID in the first array
+    for key, value in all_db_trades_by_message_id.items():
+        for trade in value:
+            if int(trade.order_id) in all_running_trades:
+                found_ids.append(trade)
+            else:
+                not_found_ids.append(trade)
+
+    for trade_to_close in not_found_ids:
+        trade_to_close.status = 'close'
+        db.update_trade(trade_to_close)
+
+    # Output the results
+    print("Found IDs:", found_ids)
+    print("Not Found IDs:", not_found_ids)
+
+

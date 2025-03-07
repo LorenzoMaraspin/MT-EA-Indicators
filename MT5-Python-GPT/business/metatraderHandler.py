@@ -158,7 +158,7 @@ class MetatraderHandler:
             if result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error("Order failed, retcode = %s", result.retcode)
                 return None
-            logger.info("Order placed successfully.")
+            logger.info(f"Order placed successfully. {result.order}")
             return result.order
         except Exception as e:
             logger.error("Exception occurred: %s", e)
@@ -177,6 +177,7 @@ class MetatraderHandler:
             "action": mt5.TRADE_ACTION_SLTP,
             "symbol": position.symbol,
             "sl": float(stoploss),
+            "tp": float(position.tp),
             "position": int(order_id),
         }
 
@@ -193,7 +194,7 @@ class MetatraderHandler:
             logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {order_id}: {e}")
             return None
 
-    def update_trade(self, trade_ids: Union[int, List[int]], new_sl: Optional[float] = None, new_tps: Optional[float] = None) -> None:
+    def update_trade(self, order_id, new_sl: Optional[float] = None, new_tps: Optional[float] = None) -> None:
         """
         Update stop loss and take profit for one or more trades.
 
@@ -202,36 +203,94 @@ class MetatraderHandler:
             new_sl (Optional[float]): New stop loss value.
             new_tps (Optional[float]): New take profit value.
         """
-        if not isinstance(trade_ids, list):
-            trade_ids = [trade_ids]
+        position = mt5.positions_get(ticket=int(order_id))
+        if not position:
+            logger.error(f"Position with trade ID {order_id} not found.")
+            return None
 
-        for i in range (0,len(trade_ids),1):
-            trade_id = trade_ids[i]
-            position = mt5.positions_get(ticket=trade_id)
-            if not position:
-                logger.error(f"Position with trade ID {trade_id} not found.")
-                continue
+        position = position[0]
+        stoploss = new_sl if new_sl is not None else position.sl
+        takeprofits = new_tps if new_tps is not None else position.tp
 
-            position = position[0]
-            stoploss = new_sl if new_sl is not None else position.sl
-            takeprofits = new_tps[len(new_tps) - 1 - i] if new_tps is not None else position.tp
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": position.symbol,
+            "sl": float(stoploss),
+            "tp": float(takeprofits),
+            "position": int(order_id),
+        }
 
-            request = {
-                "action": mt5.TRADE_ACTION_SLTP,
-                "symbol": position.symbol,
-                "sl": float(stoploss),
-                "tp": float(takeprofits),
-                "position": trade_id,
-            }
+        try:
+            result = mt5.order_send(request)
+            if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                logger.error(f"Failed to update stoploss/takeprofit for trade ID {order_id}, retcode = {result.retcode if result else 'None'}")
+            else:
+                logger.info(f"Stoploss/Takeprofit updated for trade ID {order_id}")
+        except Exception as e:
+            logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {order_id}: {e}")
 
-            try:
-                result = mt5.order_send(request)
-                if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-                    logger.error(f"Failed to update stoploss/takeprofit for trade ID {trade_id}, retcode = {result.retcode if result else 'None'}")
-                else:
-                    logger.info(f"Stoploss/Takeprofit updated for trade ID {trade_id}")
-            except Exception as e:
-                logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {trade_id}: {e}")
+    def close_trade(self, order_id: int) -> Optional[int]:
+        """
+        Close a trade based on the provided order ID.
+
+        Args:
+            order_id (int): The ID of the trade to close.
+
+        Returns:
+            Optional[int]: The result code of the close operation if successful, None otherwise.
+        """
+        position = mt5.positions_get(ticket=int(order_id))
+        if not position:
+            logger.error(f"Position with trade ID {order_id} not found.")
+            return None
+
+        position = position[0]
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": position.symbol,
+            "volume": position.volume,
+            "type": mt5.ORDER_TYPE_SELL if position.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
+            "position": int(order_id),
+            "price": mt5.symbol_info_tick(
+                position.symbol).bid if position.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(
+                position.symbol).ask,
+            "magic": 0,
+            "comment": "Close trade",
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+
+        try:
+            result = mt5.order_send(request)
+            if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+                logger.error(f"Failed to close trade ID {order_id}, retcode = {result.retcode if result else 'None'}")
+                return None
+            logger.info(f"Trade ID {order_id} closed successfully.")
+            return result.retcode
+        except Exception as e:
+            logger.error(f"Exception occurred while closing trade ID {order_id}: {e}")
+            return None
+
+    def get_all_position(self):
+        """
+        Get all open positions.
+
+        Returns:
+            List[Dict]: List of open positions as dictionaries.
+        """
+        try:
+            positions = mt5.positions_get()
+            if positions is None:
+                logger.error("No positions found, error code = %s", mt5.last_error())
+                return []
+
+            open_positions = []
+            for position in positions:
+                open_positions.append(position.ticket)
+
+            return open_positions
+        except Exception as e:
+            logger.error("Exception occurred while getting all positions: %s", e)
+            return []
 
     def get_account_balance(self) -> Optional[float]:
         """

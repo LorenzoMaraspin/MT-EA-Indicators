@@ -4,7 +4,7 @@ from data.dbHandler import dbHandler
 import asyncio
 from business.tradesAnalyzerHandler import tradesAnalyzer
 from business.telegramAnalyzer import TelegramAnalyzer
-from utility.utility import read_file, read_env_vars
+from utility.utility import compare_trades_still_open, read_env_vars
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SmartTradeAnalyzer")
@@ -27,12 +27,21 @@ async def main():
     )
     analyzer = TelegramAnalyzer(config=config, dbHandler=db, metatraderHandler=metatrader)
 
-    while True:
-        try:
-            await analyzer.start()
-        except (ConnectionError, asyncio.TimeoutError, OSError) as e:
-            logger.warning(f"❌ Connection error: {e}, restarting in 5 seconds...")
-            await asyncio.sleep(5)
+    async def run_analyzer():
+        while True:
+            try:
+                await analyzer.start()
+            except (ConnectionError, asyncio.TimeoutError, OSError) as e:
+                logger.warning(f"❌ Connection error: {e}, restarting in 5 seconds...")
+                await asyncio.sleep(5)
+
+    async def check_metatrader():
+        while True:
+            compare_trades_still_open(db,metatrader)
+            # Add your logic to check metatrader here
+            await asyncio.sleep(10)  # Example sleep, replace with actual logic
+
+    await asyncio.gather(run_analyzer(), check_metatrader())
 
 if __name__ == "__main__":
     asyncio.run(main())

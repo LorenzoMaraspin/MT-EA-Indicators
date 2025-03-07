@@ -25,7 +25,6 @@ class Trade():
 
     def to_dict(self):
         return {
-            'message_id': self.message_id,
             'asset': self.asset,
             'type': self.type,
             'volume': self.volume,
@@ -33,7 +32,5 @@ class Trade():
             'take_profit': self.take_profit,
             'entry': self.entry,
             'break_even': self.break_even,
-            'order_id': self.order_id,
-            'status': self.status,
-            'id': self.id
+            'status': self.status
         }

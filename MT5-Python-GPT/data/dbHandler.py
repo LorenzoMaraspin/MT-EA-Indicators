@@ -183,7 +183,7 @@ class dbHandler:
         cursor = conn.cursor()
 
         insert_query = """
-            INSERT INTO trades (asset, type, entry, stop_loss, take_profits, break_even, status, order_id, message_id, volume)
+            INSERT INTO trades (asset, type, entry, stop_loss, take_profit, break_even, status, order_id, message_id, volume)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;
         """
         try:
@@ -215,16 +215,42 @@ class dbHandler:
             cursor.execute(select_query,(message_id,))
             records = cursor.fetchall()
             if records:
-                logger.info(f"✅ Message found with ID: {message_id}")
+                logger.info(f"✅ Trade found with ID: {message_id}")
                 for record in records:
                     trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10])
                     response.append(trade)
                 return response
             else:
-                logger.warning(f"❌ Message not found with ID: {message_id}")
+                logger.warning(f"❌ Trade not found with ID: {message_id}")
                 return None
         except Exception as e:
-            logger.error(f"❌ Error selecting message with ID {message_id}: {e}")
+            logger.error(f"❌ Error selecting trade with ID {message_id}: {e}")
+            raise e
+
+        finally:
+            cursor.close()  # Close the cursor
+            conn.close()  # Close the connection
+
+    def get_all_trades(self):
+        """Get all trades with status open."""
+        conn = self._connect()
+        cursor = conn.cursor()
+        response = []
+        select_query = """SELECT * FROM trades WHERE status = 'open';"""
+        try:
+            cursor.execute(select_query)
+            records = cursor.fetchall()
+            if records:
+                logger.info(f"✅ Trade found")
+                for record in records:
+                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10])
+                    response.append(trade)
+                return response
+            else:
+                logger.warning(f"❌ Trade not found")
+                return None
+        except Exception as e:
+            logger.error(f"❌ Error selecting trade: {e}")
             raise e
 
         finally:
@@ -237,12 +263,12 @@ class dbHandler:
         cursor = conn.cursor()
 
         insert_query = """
-            INSERT INTO trade_updates (trade_id, update_text, new_value)
-            VALUES (%s, %s, %s) RETURNING id;
+            INSERT INTO trade_updates (trade_id, update_text, new_value, order_id)
+            VALUES (%s, %s, %s, %s) RETURNING id;
         """
         try:
             # Execute the insert query with the instance's data
-            cursor.execute(insert_query, (trade_update.trade_id, trade_update.update_text, trade_update.new_value))
+            cursor.execute(insert_query, (trade_update.trade_id, trade_update.update_text, trade_update.new_value, trade_update.order_id,))
             conn.commit()
 
             # Fetch the ID of the newly inserted record
@@ -270,7 +296,7 @@ class dbHandler:
         trade_dict = update_data.to_dict()
         # Dynamically create the SET clause and values tuple
         set_clause = ', '.join([f"{key} = %s" for key in trade_dict.keys()])
-        values = tuple(trade_dict.values()) + (update_data.id, str(update_data.message_id),str(update_data.message_id),str(update_data.order_id))  # Add message_id as the last value for WHERE clause
+        values = tuple(trade_dict.values()) + (update_data.id, update_data.message_id,str(update_data.order_id))  # Add message_id as the last value for WHERE clause
 
         update_query = f"""
             UPDATE trades
