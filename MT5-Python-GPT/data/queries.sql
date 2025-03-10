@@ -3,20 +3,22 @@ CREATE TABLE IF NOT EXISTS messages (
     telegram_id INTEGER UNIQUE,
     timestamp TIMESTAMP,
     text TEXT,
-    processed BOOLEAN DEFAULT FALSE
+    processed BOOLEAN DEFAULT FALSE,
+    chat_id TEXT
 );
 ---
 CREATE TABLE IF NOT EXISTS trades (
     id SERIAL PRIMARY KEY,
     message_id INTEGER,
-    order_id TEXT,
     asset TEXT,
     type TEXT,
     entry DOUBLE PRECISION,
     stop_loss DOUBLE PRECISION,
     take_profits DOUBLE PRECISION,
-    break_even DOUBLE PRECISION,
     status TEXT DEFAULT 'open',
+    break_even DOUBLE PRECISION,
+    order_id TEXT,
+    volume DOUBLE PRECISION,
     FOREIGN KEY (message_id) REFERENCES messages(id)
 );
 ---
@@ -25,5 +27,6 @@ CREATE TABLE IF NOT EXISTS trade_updates (
     trade_id INTEGER,
     update_text TEXT,
     new_value DOUBLE PRECISION,
+    order_id TEXT,
     FOREIGN KEY (trade_id) REFERENCES trades(id)
 );

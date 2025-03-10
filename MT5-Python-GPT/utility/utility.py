@@ -72,6 +72,12 @@ def read_env_vars():
 def compare_trades_still_open(db, metatrader):
     all_running_trades = metatrader.get_all_position()
     all_db_trades = db.get_all_trades()
+
+    if not all_db_trades and not all_running_trades:
+        return
+    if not all_db_trades:
+        return
+
     all_db_trades_by_message_id = defaultdict(list)
     for trade in all_db_trades:
         all_db_trades_by_message_id[trade.message_id].append(trade)
