@@ -2,6 +2,8 @@ import logging
 import os
 from collections import defaultdict
 
+from model.trade_updates import TradeUpdate
+
 logger = logging.getLogger(__name__)
 
 def read_file(file_path: str) -> str:
@@ -84,13 +86,25 @@ def compare_trades_still_open(db, metatrader):
                 found_ids.append(trade)
             else:
                 not_found_ids.append(trade)
+        if len(value) == len(found_ids):
+            logger.info("No further action needed")
+        elif len(found_ids) == 0 and len(value) == len(not_found_ids):
+            logger.info("All trade record in open state are closed in MT, update all trade records")
+            for trade_to_close in not_found_ids:
+                trade_to_close.status = 'close'
+                db.update_trade(trade_to_close)
+        elif len(not_found_ids) != 0:
+            logger.info("Update the stoploss of the remaining open trades")
+            for trade_to_close in not_found_ids:
+                trade_to_close.status = 'close'
+                db.update_trade(trade_to_close)
 
-    for trade_to_close in not_found_ids:
-        trade_to_close.status = 'close'
-        db.update_trade(trade_to_close)
-
-    # Output the results
-    print("Found IDs:", found_ids)
-    print("Not Found IDs:", not_found_ids)
+            for trade_to_update in found_ids:
+                new_sl = metatrader.update_trade_break_even(trade_to_update.order_id, None)
+                trade_to_update.stop_loss = new_sl
+                trade_to_update.break_even = new_sl
+                db.update_trade(trade_to_update)
+                trade_updates = TradeUpdate(trade_to_update.id, "Move to BE, after first TP", 1, str(trade_to_update.order_id))
+                db.insert_trade_update(trade_updates)
 
 

@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 class dbHandler:
     def __init__(self, config):
+        """
+        Initialize the dbHandler with the given configuration.
+
+        Args:
+            config (dict): A dictionary containing database configuration.
+        """
         self.config = config
         self.host = config['DB']['HOST']
         self.port = config['DB']['PORT']
@@ -25,9 +31,13 @@ class dbHandler:
             "password": self.password
         }
 
-
     def _connect(self):
-        """Connect to PostgreSQL and return the connection"""
+        """
+        Connect to PostgreSQL and return the connection.
+
+        Returns:
+            connection: A connection object to the PostgreSQL database.
+        """
         try:
             conn = psycopg2.connect(**self.db_config)
             logger.info("✅ Connected to the database successfully!")
@@ -37,6 +47,15 @@ class dbHandler:
             return None
 
     def create_tables(self, create_table_sqls):
+        """
+        Create tables in the database using the provided SQL statements.
+
+        Args:
+            create_table_sqls (str): A string containing SQL statements to create tables, separated by '---'.
+
+        Raises:
+            Exception: If there is an error during table creation.
+        """
         conn = self._connect()
         cursor = conn.cursor()
         try:
@@ -52,7 +71,18 @@ class dbHandler:
             conn.close()
 
     def insert_message(self, message):
-        """Save the Message instance to the database."""
+        """
+        Save the Message instance to the database.
+
+        Args:
+            message (Message): An instance of the Message class to be saved.
+
+        Returns:
+            int: The ID of the newly inserted message.
+
+        Raises:
+            Exception: If there is an error during the insert operation.
+        """
         conn = self._connect()
         cursor = conn.cursor()
 
@@ -80,34 +110,55 @@ class dbHandler:
             conn.close()  # Close the connection
 
     def get_message_by_id(self, telegram_id, chat_id):
-        """Get a message by its ID."""
-        conn = self._connect()
-        cursor = conn.cursor()
+        """
+        Retrieve a message by its Telegram ID and chat ID.
+
+        Args:
+            telegram_id (int): The Telegram ID of the message.
+            chat_id (str): The chat ID associated with the message.
+
+        Returns:
+            Message: An instance of the Message class if found, otherwise None.
+
+        Raises:
+            Exception: If there is an error during the database query.
+        """
+        conn = self._connect()  # Establish a connection to the database
+        cursor = conn.cursor()  # Create a cursor object to interact with the database
 
         select_query = """SELECT * FROM messages WHERE telegram_id = %s AND chat_id = %s;"""
         try:
-            cursor.execute(select_query,(int(telegram_id), str(chat_id),))
-            record = cursor.fetchone()
+            # Execute the SELECT query with the provided telegram_id and chat_id
+            cursor.execute(select_query, (int(telegram_id), str(chat_id),))
+            record = cursor.fetchone()  # Fetch the first matching record
+
             if record:
-                logger.info(f"✅ Message found with ID: {telegram_id}")
-                message = Message(id=record[0],telegram_id=record[1], timestamp=record[2], text=record[3], processed=record[4], chat_id=record[5])
+                # If a record is found, log the success and create a Message instance
+                logger.info(f"✅ Message found with ID: {telegram_id} from chat: {chat_id}")
+                message = Message(id=record[0], telegram_id=record[1], timestamp=record[2], text=record[3], processed=record[4], chat_id=record[5])
                 return message
             else:
+                # If no record is found, log a warning and return None
                 logger.warning(f"❌ Message not found with ID: {telegram_id}")
                 return None
         except Exception as e:
+            # Log any exceptions that occur during the query
             logger.error(f"❌ Error selecting message with ID {telegram_id}: {e}")
             raise e
-
         finally:
-            cursor.close()  # Close the cursor
-            conn.close()  # Close the connection
+            # Ensure the cursor and connection are closed
+            cursor.close()
+            conn.close()
 
     def update_message(self, update_data):
         """
         Update the columns of a message dynamically based on the provided update data.
-        :param message_id: The ID of the message to update.
-        :param update_data: A dictionary containing the columns and their new values to update.
+
+        Args:
+            update_data (Message): An instance of the Message class containing updated data.
+
+        Raises:
+            Exception: If there is an error during the update operation.
         """
         conn = self._connect()  # Establish connection
         cursor = conn.cursor()
@@ -143,7 +194,15 @@ class dbHandler:
             conn.close()  # Close the connection
 
     def get_latest_message_with_trades(self):
-        """Fetch the latest message and its associated trades."""
+        """
+        Fetch the latest message and its associated trades.
+
+        Returns:
+            list: A list of Trade instances associated with the latest message, or None if no trades are found.
+
+        Raises:
+            Exception: If there is an error during the query.
+        """
         conn = self._connect()
         cursor = conn.cursor()
 
@@ -178,7 +237,18 @@ class dbHandler:
             conn.close()
 
     def insert_trade(self, trade):
-        """Save the Message instance to the database."""
+        """
+        Save the Trade instance to the database.
+
+        Args:
+            trade (Trade): An instance of the Trade class to be saved.
+
+        Returns:
+            int: The ID of the newly inserted trade.
+
+        Raises:
+            Exception: If there is an error during the insert operation.
+        """
         conn = self._connect()
         cursor = conn.cursor()
 
@@ -206,13 +276,24 @@ class dbHandler:
             conn.close()  # Close the connection
 
     def get_trades_by_id(self, message_id):
-        """Get a message by its ID."""
+        """
+        Get trades by their message ID.
+
+        Args:
+            message_id (int): The message ID to filter trades.
+
+        Returns:
+            list: A list of Trade instances associated with the given message ID, or None if no trades are found.
+
+        Raises:
+            Exception: If there is an error during the query.
+        """
         conn = self._connect()
         cursor = conn.cursor()
         response = []
         select_query = """SELECT * FROM trades WHERE message_id = %s;"""
         try:
-            cursor.execute(select_query,(message_id,))
+            cursor.execute(select_query, (message_id,))
             records = cursor.fetchall()
             if records:
                 logger.info(f"✅ Trade found with ID: {message_id}")
@@ -232,7 +313,15 @@ class dbHandler:
             conn.close()  # Close the connection
 
     def get_all_trades(self):
-        """Get all trades with status open."""
+        """
+        Get all trades with status 'open'.
+
+        Returns:
+            list: A list of Trade instances with status 'open', or None if no trades are found.
+
+        Raises:
+            Exception: If there is an error during the query.
+        """
         conn = self._connect()
         cursor = conn.cursor()
         response = []
@@ -258,7 +347,18 @@ class dbHandler:
             conn.close()  # Close the connection
 
     def insert_trade_update(self, trade_update):
-        """Save the Message instance to the database."""
+        """
+        Save the TradeUpdate instance to the database.
+
+        Args:
+            trade_update (TradeUpdate): An instance of the TradeUpdate class to be saved.
+
+        Returns:
+            int: The ID of the newly inserted trade update.
+
+        Raises:
+            Exception: If there is an error during the insert operation.
+        """
         conn = self._connect()
         cursor = conn.cursor()
 
@@ -288,15 +388,19 @@ class dbHandler:
     def update_trade(self, update_data):
         """
         Update the columns of a trade dynamically based on the provided update data.
-        :param message_id: The ID of the message to update.
-        :param update_data: A dictionary containing the columns and their new values to update.
+
+        Args:
+            update_data (Trade): An instance of the Trade class containing updated data.
+
+        Raises:
+            Exception: If there is an error during the update operation.
         """
         conn = self._connect()  # Establish connection
         cursor = conn.cursor()
         trade_dict = update_data.to_dict()
         # Dynamically create the SET clause and values tuple
         set_clause = ', '.join([f"{key} = %s" for key in trade_dict.keys()])
-        values = tuple(trade_dict.values()) + (update_data.id, update_data.message_id,str(update_data.order_id))  # Add message_id as the last value for WHERE clause
+        values = tuple(trade_dict.values()) + (update_data.id, update_data.message_id, str(update_data.order_id))  # Add message_id as the last value for WHERE clause
 
         update_query = f"""
             UPDATE trades

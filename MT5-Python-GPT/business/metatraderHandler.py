@@ -53,7 +53,7 @@ class MetatraderHandler:
             minimum_trade_count (int): Minimum number of trades to open.
 
         Returns:
-            List[int]: List of trade IDs for successfully opened trades.
+            List[Trade]: List of Trade instances for successfully opened trades.
         """
         results = []
         trades_len = max(len(trades), minimum_trade_count)
@@ -165,6 +165,16 @@ class MetatraderHandler:
             return None
 
     def update_trade_break_even(self, order_id, new_sl: Optional[float] = None):
+        """
+        Update the stop loss to break even for a given trade.
+
+        Args:
+            order_id (int): The ID of the trade to update.
+            new_sl (Optional[float]): New stop loss value, defaults to the entry price if not provided.
+
+        Returns:
+            Optional[float]: The new stop loss value if successful, None otherwise.
+        """
         position = mt5.positions_get(ticket=int(order_id))
         if not position:
             logger.error(f"Position with trade ID {order_id} not found.")
@@ -184,8 +194,7 @@ class MetatraderHandler:
         try:
             result = mt5.order_send(request)
             if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-                logger.error(
-                    f"Failed to update stoploss/takeprofit for trade ID {order_id}, retcode = {result.retcode if result else 'None'}")
+                logger.error(f"Failed to update stoploss/takeprofit for trade ID {order_id}, retcode = {result.retcode if result else 'None'}")
                 return None
             else:
                 logger.info(f"Stoploss/Takeprofit updated for trade ID {order_id}")
@@ -196,10 +205,10 @@ class MetatraderHandler:
 
     def update_trade(self, order_id, new_sl: Optional[float] = None, new_tps: Optional[float] = None) -> None:
         """
-        Update stop loss and take profit for one or more trades.
+        Update stop loss and take profit for a trade.
 
         Args:
-            trade_ids (Union[int, List[int]]): Trade ID or list of trade IDs.
+            order_id (int): The ID of the trade to update.
             new_sl (Optional[float]): New stop loss value.
             new_tps (Optional[float]): New take profit value.
         """
@@ -251,9 +260,7 @@ class MetatraderHandler:
             "volume": position.volume,
             "type": mt5.ORDER_TYPE_SELL if position.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
             "position": int(order_id),
-            "price": mt5.symbol_info_tick(
-                position.symbol).bid if position.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(
-                position.symbol).ask,
+            "price": mt5.symbol_info_tick(position.symbol).bid if position.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(position.symbol).ask,
             "magic": 0,
             "comment": "Close trade",
             "type_filling": mt5.ORDER_FILLING_IOC,
@@ -270,12 +277,12 @@ class MetatraderHandler:
             logger.error(f"Exception occurred while closing trade ID {order_id}: {e}")
             return None
 
-    def get_all_position(self):
+    def get_all_position(self) -> List[int]:
         """
         Get all open positions.
 
         Returns:
-            List[Dict]: List of open positions as dictionaries.
+            List[int]: List of open position tickets.
         """
         try:
             positions = mt5.positions_get()
@@ -283,10 +290,7 @@ class MetatraderHandler:
                 logger.error("No positions found, error code = %s", mt5.last_error())
                 return []
 
-            open_positions = []
-            for position in positions:
-                open_positions.append(position.ticket)
-
+            open_positions = [position.ticket for position in positions]
             return open_positions
         except Exception as e:
             logger.error("Exception occurred while getting all positions: %s", e)
