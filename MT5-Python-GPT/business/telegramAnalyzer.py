@@ -48,7 +48,7 @@ class TelegramAnalyzer:
         if not self.prefilter_message(text):
             logger.error(f"❌ Invalid message: {text}")
             return
-
+        await self.client.forward_messages(self.destination_chat_id, event.message)
         message = Message(telegram_id=event.message.id, chat_id=event.chat_id, timestamp=event.message.date, text=text, processed=False)
         parsed_text = self.extract_trade_data(text)
 
@@ -115,6 +115,7 @@ class TelegramAnalyzer:
         if not self.prefilter_message(edited_text):
             logger.error(f"❌ Invalid message: {edited_text}")
             return
+        await self.client.forward_messages(self.destination_chat_id, event.message)
         try:
             existing_message = self.dbHandler.get_message_by_id(event.message.id, event.chat_id)
             message = Message(telegram_id=event.message.id, chat_id=event.chat_id, timestamp=event.message.date, text=edited_text, processed=False)

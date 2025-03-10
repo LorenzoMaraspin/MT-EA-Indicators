@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS trades (
     type TEXT,
     entry DOUBLE PRECISION,
     stop_loss DOUBLE PRECISION,
-    take_profits DOUBLE PRECISION,
+    take_profit DOUBLE PRECISION,
     status TEXT DEFAULT 'open',
     break_even DOUBLE PRECISION,
     order_id TEXT,
