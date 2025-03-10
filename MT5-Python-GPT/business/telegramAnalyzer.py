@@ -18,6 +18,7 @@ class TelegramAnalyzer:
 
         # Telegram client setup
         self.tg_key_based_on_env = "TG_DEV" if config['ENV'] == 'DEV' else "TG_PROD"
+        self.mt_key_based_on_env = "MT5_DEV" if config['ENV'] == 'DEV' else "MT5"
         self.client = TelegramClient(
             config[self.tg_key_based_on_env]['SESSION'],
             config[self.tg_key_based_on_env]['ID'],
@@ -56,7 +57,7 @@ class TelegramAnalyzer:
             try:
                 db_message_id = self.dbHandler.insert_message(message)
                 trades = self.create_trade_dicts(parsed_text, db_message_id)
-                trade_results = self.metatraderHandler.open_multiple_trades(trades, self.config['MT5']['TRADE_MANAGEMENT'][parsed_text['symbol']]['default_trades'])
+                trade_results = self.metatraderHandler.open_multiple_trades(trades, self.config[self.mt_key_based_on_env]['TRADE_MANAGEMENT'][parsed_text['symbol']]['default_trades'])
                 for trade in trade_results:
                     self.dbHandler.insert_trade(trade)
                 message.processed = True
@@ -235,7 +236,7 @@ class TelegramAnalyzer:
         """Create trade dictionaries from parsed trade data."""
         try:
             tps = trade_dict.get('take_profits', {})
-            symbol_config = self.config['MT5']['TRADE_MANAGEMENT'][trade_dict['symbol'].upper()]
+            symbol_config = self.config[self.mt_key_based_on_env]['TRADE_MANAGEMENT'][trade_dict['symbol'].upper()]
 
             # Ensure tps is a list (if not, initialize as empty)
             if not isinstance(tps, list) or not tps:
