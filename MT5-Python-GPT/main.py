@@ -19,11 +19,12 @@ logger.addHandler(console_handler)
 
 async def main():
     config = read_env_vars()
+    mt5_env = "MT5_DEV" if config['ENV'] == 'DEV' else "MT5"
     db = dbHandler(config=config)
     metatrader = MetatraderHandler(
-        account=config['MT5']['ACCOUNT'],
-        password=config['MT5']['PASSWORD'],
-        server=config['MT5']['SERVER']
+        account=config[mt5_env]['ACCOUNT'],
+        password=config[mt5_env]['PASSWORD'],
+        server=config[mt5_env]['SERVER']
     )
     analyzer = TelegramAnalyzer(config=config, dbHandler=db, metatraderHandler=metatrader)
 

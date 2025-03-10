@@ -18,11 +18,12 @@ class dbHandler:
             config (dict): A dictionary containing database configuration.
         """
         self.config = config
-        self.host = config['DB']['HOST']
-        self.port = config['DB']['PORT']
-        self.dbname = config['DB']['DBNAME']
-        self.user = config['DB']['USER']
-        self.password = config['DB']['PASSWORD']
+        self.db_env = "DB_DEV" if self.config['ENV'] == 'DEV' else "DB"
+        self.host = config[self.db_env]['HOST']
+        self.port = config[self.db_env]['PORT']
+        self.dbname = config[self.db_env]['DBNAME']
+        self.user = config[self.db_env]['USER']
+        self.password = config[self.db_env]['PASSWORD']
         self.db_config = {
             "host": self.host,  # Or use "postgres_db" if running inside another Docker container
             "port": self.port,

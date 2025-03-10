@@ -25,6 +25,29 @@ def read_env_vars():
         'SERVER': os.environ.get('MT5_SERVER').strip(),
         'TRADE_MANAGEMENT': {
             'US30': {
+                "symbol": "US30.cash",
+                "default_trades": 3,
+                "default_lot_size": 2.0
+            },
+            'XAUUSD': {
+                "symbol": "XAUUSD",
+                "default_trades": 2,
+                "default_lot_size": 0.5
+            },
+            'XAU': {
+                "symbol": "XAUUSD",
+                "default_trades": 2,
+                "default_lot_size": 0.5
+            }
+        }
+    }
+
+    config['MT5_DEV'] = {
+        'ACCOUNT': int(os.environ.get('MT5_ACCOUNT_DEV')),
+        'PASSWORD': os.environ.get('MT5_PASSWORD_DEV').strip(),
+        'SERVER': os.environ.get('MT5_SERVER_DEV').strip(),
+        'TRADE_MANAGEMENT': {
+            'US30': {
                 "symbol": "DJ30",
                 "default_trades": 3,
                 "default_lot_size": 2.0
@@ -41,6 +64,7 @@ def read_env_vars():
             }
         }
     }
+
     config['TG_PROD'] = {
         'ID': os.environ.get('TELEGRAM_M_API_ID'),
         'HASH': os.environ.get('TELEGRAM_M_API_HASH'),
@@ -60,6 +84,13 @@ def read_env_vars():
         'HOST': os.environ.get('DB_HOST'),
         'PORT': os.environ.get('DB_PORT'),
         'DBNAME': os.environ.get('DB_NAME'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PWD')
+    }
+    config['DB_DEV'] = {
+        'HOST': os.environ.get('DB_HOST'),
+        'PORT': os.environ.get('DB_PORT'),
+        'DBNAME': os.environ.get('DB_NAME_DEV'),
         'USER': os.environ.get('DB_USER'),
         'PASSWORD': os.environ.get('DB_PWD')
     }
