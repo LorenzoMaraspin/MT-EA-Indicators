@@ -323,6 +323,7 @@ class dbHandler:
         Raises:
             Exception: If there is an error during the query.
         """
+        logger.setLevel(logging.CRITICAL)
         conn = self._connect()
         cursor = conn.cursor()
         response = []
@@ -344,6 +345,7 @@ class dbHandler:
             raise e
 
         finally:
+            logger.setLevel(logging.INFO)
             cursor.close()  # Close the cursor
             conn.close()  # Close the connection
 
