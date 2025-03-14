@@ -68,7 +68,12 @@ class TelegramAnalyzer:
             except Exception as e:
                 logger.error(f"❌ Error processing trade update signal: {e}")
         elif parsed_text['message_type'] == 'close':
-            self.close_signal_trade(parsed_text, text)
+            if reply_to_id is None:
+                trades_to_close = self.dbHandler.get_latest_message_with_trades()
+            else:
+                replied_message = self.dbHandler.get_message_by_id(reply_to_id, event.chat_id)
+                trades_to_close = self.dbHandler.get_trades_by_id(replied_message.id)
+            self.close_signal_trade(parsed_text, text, trades_to_close)
         else:
             logger.error(f"❌ Invalid message type, not supported: {parsed_text}")
 
@@ -124,10 +129,9 @@ class TelegramAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error processing new trade signal: {e}")
 
-    def close_signal_trade(self, parsed_text, text):
+    def close_signal_trade(self, parsed_text, text, trades_to_close):
         logger.info(f'❎ New trade signal to close the position: {parsed_text}')
         try:
-            trades_to_close = self.dbHandler.get_latest_message_with_trades()
             for item in trades_to_close:
                 response_close = self.metatraderHandler.close_trade(item.order_id)
                 if response_close:
