@@ -312,7 +312,7 @@ class dbHandler:
             cursor.close()  # Close the cursor
             conn.close()  # Close the connection
 
-    def get_all_trades(self):
+    def get_all_trades(self, account_id):
         """
         Get all trades with status 'open'.
 
@@ -326,9 +326,9 @@ class dbHandler:
         conn = self._connect()
         cursor = conn.cursor()
         response = []
-        select_query = """SELECT * FROM trades WHERE status = 'open';"""
+        select_query = """SELECT * FROM trades WHERE status = 'open' and account_id = %s;"""
         try:
-            cursor.execute(select_query)
+            cursor.execute(select_query, (account_id,))
             records = cursor.fetchall()
             if records:
                 logger.info(f"✅ Trade found")

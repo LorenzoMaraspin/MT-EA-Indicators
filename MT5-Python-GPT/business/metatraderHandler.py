@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple, Union
 logger = logging.getLogger(__name__)
 
 class MetatraderHandler:
-    def __init__(self, account: int, password: str, server: str):
+    def __init__(self, account: int, password: str, server: str, trade_mng):
         """
         Initialize the MetaTrader handler.
 
@@ -18,7 +18,7 @@ class MetatraderHandler:
         self.account = account
         self.password = password
         self.server = server
-
+        self.trade_mng = trade_mng
     def initialize_mt5(self) -> bool:
         """
         Initialize and log in to the MetaTrader 5 terminal.
@@ -43,7 +43,7 @@ class MetatraderHandler:
         mt5.shutdown()
         logger.info("MetaTrader 5 shutdown successfully.")
 
-    def open_multiple_trades(self, trades: List[Dict[str, Union[str, float]]], minimum_trade_count: int) -> List[Trade]:
+    def open_multiple_trades(self, trades: List[Dict[str, Union[str, float]]], not_parsed_symbol) -> List[Trade]:
         """
         Open multiple trades based on the provided trade details.
 
@@ -55,11 +55,13 @@ class MetatraderHandler:
             List[Trade]: List of Trade instances for successfully opened trades.
         """
         results = []
+        minimum_trade_count = self.trade_mng[not_parsed_symbol]['default_trades']
+        volume = self.trade_mng[not_parsed_symbol]['default_lot_size']
         trades_len = max(len(trades), minimum_trade_count)
-
         self.initialize_mt5()
         for i in range(trades_len):
             trade_details = trades[i] if len(trades) > 1 else trades[0]
+            trade_details['volume'] = volume
             trade_id = self.open_trade(trade_details)
             if trade_id:
                 trade = Trade(

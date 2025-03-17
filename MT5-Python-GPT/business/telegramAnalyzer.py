@@ -102,8 +102,7 @@ class TelegramAnalyzer:
             for mt_handler in self.metatraderHandlers:
                 parsed_text['account_id'] = mt_handler.account
                 trades = create_trade_dicts(parsed_text, db_message_id, self.config, "MT5")
-                trade_results = mt_handler.open_multiple_trades(trades, self.config["MT5"][
-                    'TRADE_MANAGEMENT'][parsed_text['symbol']]['default_trades'])
+                trade_results = mt_handler.open_multiple_trades(trades, parsed_text['symbol'])
                 if trade_results:
                     for trade in trade_results:
                         self.dbHandler.insert_trade(trade)
@@ -128,28 +127,34 @@ class TelegramAnalyzer:
             logger.error(f"❌ Error processing trade close signal: {e}")
 
     def update_signal_trade_be(self, trades_to_update, parsed_text, text):
-        for mt_handler in self.metatraderHandlers:
-            for item in trades_to_update:
-                sl = parsed_text['stop_loss'] if parsed_text['stop_loss'] is not None and parsed_text[
-                    'stop_loss'] != 0 else None
-                response_be = mt_handler.update_trade_break_even(item.order_id, sl)
-                if response_be is not None:
-                    trade_updates = TradeUpdate(item.id, str(text), response_be, str(item.order_id), mt_handler.account)
-                    self.dbHandler.insert_trade_update(trade_updates)
-                    item.stop_loss = response_be
-                    item.break_even = response_be
-                    self.dbHandler.update_trade(item)
-    def update_signal_trade(self, existing_message, parsed_text, message):
-        existing_trades = self.dbHandler.get_trades_by_id(existing_message.id)
-        trades = create_trade_dicts(parsed_text, existing_message.id, self.config, "MT5")[
-                 -len(existing_trades):]
-        for i, element in enumerate(existing_trades):
-            trade = trades[0] if len(trades) < len(existing_trades) else trades[i]
-            element.stop_loss = trade['SL']
-            element.take_profit = trade['TP']
+        try:
             for mt_handler in self.metatraderHandlers:
-                mt_handler.update_trade(element.order_id, element.stop_loss, element.take_profit)
-                self.dbHandler.update_trade(element)
+                for item in trades_to_update:
+                    sl = parsed_text['stop_loss'] if parsed_text['stop_loss'] is not None and parsed_text[
+                        'stop_loss'] != 0 else None
+                    response_be = mt_handler.update_trade_break_even(item.order_id, sl)
+                    if response_be is not None:
+                        trade_updates = TradeUpdate(item.id, str(text), response_be, str(item.order_id), mt_handler.account)
+                        self.dbHandler.insert_trade_update(trade_updates)
+                        item.stop_loss = response_be
+                        item.break_even = response_be
+                        self.dbHandler.update_trade(item)
+        except Exception as e:
+            logger.error(f"❌ Error updating trade to break even: {e}")
+    def update_signal_trade(self, existing_message, parsed_text, message):
+        try:
+            existing_trades = self.dbHandler.get_trades_by_id(existing_message.id)
+            trades = create_trade_dicts(parsed_text, existing_message.id, self.config, "MT5")[
+                     -len(existing_trades):]
+            for i, element in enumerate(existing_trades):
+                trade = trades[0] if len(trades) < len(existing_trades) else trades[i]
+                element.stop_loss = trade['SL']
+                element.take_profit = trade['TP']
+                for mt_handler in self.metatraderHandlers:
+                    mt_handler.update_trade(element.order_id, element.stop_loss, element.take_profit)
+                    self.dbHandler.update_trade(element)
 
-        message.processed = True
-        self.dbHandler.update_message(message)
+            message.processed = True
+            self.dbHandler.update_message(message)
+        except Exception as e:
+            logger.error(f"❌ Error updating signal trade: {e}")

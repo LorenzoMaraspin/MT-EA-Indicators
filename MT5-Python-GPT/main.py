@@ -27,7 +27,8 @@ async def main():
         metatrader = MetatraderHandler(
             account=config["MT5"]['ACCOUNT'],
             password=config["MT5"]['PASSWORD'],
-            server=config["MT5"]['SERVER']
+            server=config["MT5"]['SERVER'],
+            trade_mng=config['MT5']['TRADE_MANAGEMENT']
         )
         metatrader_handles.append(metatrader)
     analyzer = TelegramAnalyzer(config=config, dbHandler=db, metatraderHandlers=metatrader_handles)
