@@ -34,7 +34,7 @@ def read_env_vars():
     config['DB'] = {
         'HOST': os.environ.get('DB_HOST'),
         'PORT': os.environ.get('DB_PORT'),
-        'DBNAME': os.environ.get('DB_NAME') if config['ENV'] == 'prod' else os.environ.get('DB_NAME_DEV'),
+        'DBNAME': os.environ.get('DB_NAME') if config['ENV'] == 'PROD' else os.environ.get('DB_NAME_DEV'),
         'USER': os.environ.get('DB_USER'),
         'PASSWORD': os.environ.get('DB_PWD')
     }

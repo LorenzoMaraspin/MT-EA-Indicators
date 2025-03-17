@@ -33,15 +33,17 @@ CREATE TABLE IF NOT EXISTS trade_updates (
     FOREIGN KEY (trade_id) REFERENCES trades(id)
 );
 ---
-CREATE TABLE IF NOT EXISTS software_accounts (
-    mt5_account_id INTEGER PRIMARY KEY,
-    mt5_server TEXT,
-    mt5_broker TEXT,
-    mt5_balance INTEGER,
-    mt5_password TEXT,
-    environment TEXT,
-    telegram_id TEXT,
-    telegram_phone TEXT,
-    telegram_channels TEXT,
-    telegram_hash TEXT
+CREATE TABLE public.software_accounts (
+	mt5_account_id int4 NOT NULL,
+	mt5_server text NULL,
+	mt5_broker text NULL,
+	mt5_balance int4 NULL,
+	environment text NULL,
+	telegram_id text NULL,
+	telegram_phone text NULL,
+	telegram_channels text NULL,
+	telegram_session text NULL,
+	mt5_password text NULL,
+	telegram_hash text NULL,
+	CONSTRAINT software_accounts_pkey PRIMARY KEY (mt5_account_id)
 );
