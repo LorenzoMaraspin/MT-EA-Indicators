@@ -1,11 +1,11 @@
 import logging
 import sqlite3
 from http.client import responses
-
 import psycopg2
 from model.trades import Trade
 from model.messages import Message
 from model.trade_updates import TradeUpdate
+from model.software_accounts import SoftwareAccounts
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +18,11 @@ class dbHandler:
             config (dict): A dictionary containing database configuration.
         """
         self.config = config
-        self.db_env = "DB_DEV" if self.config['ENV'] == 'DEV' else "DB"
-        self.host = config[self.db_env]['HOST']
-        self.port = config[self.db_env]['PORT']
-        self.dbname = config[self.db_env]['DBNAME']
-        self.user = config[self.db_env]['USER']
-        self.password = config[self.db_env]['PASSWORD']
+        self.host = config["DB"]['HOST']
+        self.port = config["DB"]['PORT']
+        self.dbname = config["DB"]['DBNAME']
+        self.user = config["DB"]['USER']
+        self.password = config["DB"]['PASSWORD']
         self.db_config = {
             "host": self.host,  # Or use "postgres_db" if running inside another Docker container
             "port": self.port,
@@ -222,7 +221,7 @@ class dbHandler:
             if records:
                 logger.info("✅ Latest message and trade found.")
                 for record in records:
-                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10])
+                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10], account_id=record[11])
                     response.append(trade)
                 return response
             else:
@@ -254,12 +253,12 @@ class dbHandler:
         cursor = conn.cursor()
 
         insert_query = """
-            INSERT INTO trades (asset, type, entry, stop_loss, take_profit, break_even, status, order_id, message_id, volume)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;
+            INSERT INTO trades (asset, type, entry, stop_loss, take_profit, break_even, status, order_id, message_id, volume, account_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id;
         """
         try:
             # Execute the insert query with the instance's data
-            cursor.execute(insert_query, (trade.asset, trade.type, trade.entry, trade.stop_loss, trade.take_profit, trade.break_even, trade.status, trade.order_id, trade.message_id, trade.volume))
+            cursor.execute(insert_query, (trade.asset, trade.type, trade.entry, trade.stop_loss, trade.take_profit, trade.break_even, trade.status, trade.order_id, trade.message_id, trade.volume, trade.account_id))
             conn.commit()
 
             # Fetch the ID of the newly inserted record
@@ -299,7 +298,7 @@ class dbHandler:
             if records:
                 logger.info(f"✅ Trade found with ID: {message_id}")
                 for record in records:
-                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10])
+                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10], account_id=record[11])
                     response.append(trade)
                 return response
             else:
@@ -334,7 +333,7 @@ class dbHandler:
             if records:
                 logger.info(f"✅ Trade found")
                 for record in records:
-                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10])
+                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10], account_id=record[11])
                     response.append(trade)
                 return response
             else:
@@ -366,12 +365,12 @@ class dbHandler:
         cursor = conn.cursor()
 
         insert_query = """
-            INSERT INTO trade_updates (trade_id, update_text, new_value, order_id)
-            VALUES (%s, %s, %s, %s) RETURNING id;
+            INSERT INTO trade_updates (trade_id, update_text, new_value, order_id, account_id)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id;
         """
         try:
             # Execute the insert query with the instance's data
-            cursor.execute(insert_query, (trade_update.trade_id, trade_update.update_text, trade_update.new_value, trade_update.order_id,))
+            cursor.execute(insert_query, (trade_update.trade_id, trade_update.update_text, trade_update.new_value, trade_update.order_id,trade_update.account_id,))
             conn.commit()
 
             # Fetch the ID of the newly inserted record
@@ -425,6 +424,42 @@ class dbHandler:
         except Exception as e:
             conn.rollback()  # Rollback in case of error
             logger.error(f"❌ Error updating trades with ID {update_data.message_id}: {e}")
+            raise e
+
+        finally:
+            cursor.close()  # Close the cursor
+            conn.close()  # Close the connection
+
+    def get_software_accounts_based_on_env(self, env):
+        """
+        Update the columns of a trade dynamically based on the provided update data.
+
+        Args:
+            update_data (Trade): An instance of the Trade class containing updated data.
+
+        Raises:
+            Exception: If there is an error during the update operation.
+        """
+        conn = self._connect()  # Establish connection
+        cursor = conn.cursor()
+
+        response = []
+        select_query = """select * from software_accounts where software_accounts.environment = %s;"""
+        try:
+            cursor.execute(select_query, (env,))
+            records = cursor.fetchall()
+            if records:
+                logger.info(f"✅ Software Accounts found with environment: {env}")
+                for record in records:
+                    account = SoftwareAccounts(mt5_account_id=record[0], mt5_server=record[1], mt5_broker=record[2], mt5_balance=record[3], environment=record[4], telegram_id=record[5], telegram_phone=record[6], telegram_channels=record[7], telegram_session=record[8], mt5_password=record[9], telegram_hash=record[10])
+                    response.append(account)
+                return response
+            else:
+                logger.warning(f"❌ Software Accounts not found with env: {env}")
+                return None
+        except Exception as e:
+            conn.rollback()  # Rollback in case of error
+            logger.error(f"❌ Error getting accounts with env {env}: {e}")
             raise e
 
         finally:

@@ -4,7 +4,7 @@ from data.dbHandler import dbHandler
 import asyncio
 from business.tradesAnalyzerHandler import tradesAnalyzer
 from business.telegramAnalyzer import TelegramAnalyzer
-from utility.utility import compare_trades_still_open, read_env_vars
+from utility.utility import compare_trades_still_open, read_env_vars, update_config_with_accounts
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SmartTradeAnalyzer")
@@ -19,14 +19,18 @@ logger.addHandler(console_handler)
 
 async def main():
     config = read_env_vars()
-    mt5_env = "MT5_DEV" if config['ENV'] == 'DEV' else "MT5"
     db = dbHandler(config=config)
-    metatrader = MetatraderHandler(
-        account=config[mt5_env]['ACCOUNT'],
-        password=config[mt5_env]['PASSWORD'],
-        server=config[mt5_env]['SERVER']
-    )
-    analyzer = TelegramAnalyzer(config=config, dbHandler=db, metatraderHandler=metatrader)
+    accounts = db.get_software_accounts_based_on_env(config['ENV'].lower())
+    metatrader_handles = []
+    for account in accounts:
+        config.update(update_config_with_accounts(account,config))
+        metatrader = MetatraderHandler(
+            account=config["MT5"]['ACCOUNT'],
+            password=config["MT5"]['PASSWORD'],
+            server=config["MT5"]['SERVER']
+        )
+        metatrader_handles.append(metatrader)
+    analyzer = TelegramAnalyzer(config=config, dbHandler=db, metatraderHandlers=metatrader_handles)
 
     async def run_analyzer():
         while True:
@@ -38,7 +42,8 @@ async def main():
 
     async def check_metatrader():
         while True:
-            compare_trades_still_open(db,metatrader)
+            for mt in metatrader_handles:
+                compare_trades_still_open(db,mt)
             # Add your logic to check metatrader here
             await asyncio.sleep(10)  # Example sleep, replace with actual logic
 

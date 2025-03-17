@@ -18,8 +18,63 @@ def read_file(file_path: str) -> str:
         logger.exception(f"Error: An I/O error occurred: {e_io}")
         raise e_io
 
+def generate_broker_config(symbol, default_trades, lot_sizes, account):
+    lot_size = lot_sizes[0] if account.mt5_balance == 100000 else lot_sizes[1]
+
+    return {
+        "symbol": symbol,
+        "default_trades": default_trades,
+        "default_lot_size": lot_size
+    }
+
 def read_env_vars():
     config = {}
+    config['ENV'] = os.environ.get('ENVIRONMENT')
+
+    config['DB'] = {
+        'HOST': os.environ.get('DB_HOST'),
+        'PORT': os.environ.get('DB_PORT'),
+        'DBNAME': os.environ.get('DB_NAME') if config['ENV'] == 'prod' else os.environ.get('DB_NAME_DEV'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PWD')
+    }
+
+    return config
+
+def update_config_with_accounts(account, config):
+    config['BROKER'] = {
+        'ftmo': {
+            'US30': generate_broker_config("US30.cash", 3, [2.0, 0.15], account),
+            'XAUUSD': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account),
+            'XAU': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account)
+        },
+        'vantage': {
+            'US30': generate_broker_config("DJ30", 3, [2.0, 0.15], account),
+            'XAUUSD': generate_broker_config("XAUUSD+", 2, [0.5, 0.04], account),
+            'XAU': generate_broker_config("XAUUSD+", 2, [0.5, 0.04], account)
+        }
+    }
+
+    config['MT5'] = {
+        'ACCOUNT': int(account.mt5_account_id),
+        'PASSWORD': account.mt5_password,
+        'SERVER': account.mt5_server,
+        'BROKER': account.mt5_broker,
+        'TRADE_MANAGEMENT': config['BROKER'][account.mt5_broker.lower()]
+    }
+    config['TG'] = {
+        'ID': account.telegram_id,
+        'HASH': account.telegram_hash,
+        'PHONE': account.telegram_phone,
+        'SESSION': account.telegram_session,
+        'CHANNELS': [int(channel) for channel in account.telegram_channels.split(',')]
+    }
+
+    return config
+
+def read_env_vars_v2():
+    config = {}
+
     config['MT5'] = {
         'ACCOUNT': int(os.environ.get('MT5_ACCOUNT')),
         'PASSWORD': os.environ.get('MT5_PASSWORD').strip(),
@@ -143,7 +198,7 @@ def compare_trades_still_open(db, metatrader):
                 trade_to_update.stop_loss = new_sl
                 trade_to_update.break_even = new_sl
                 db.update_trade(trade_to_update)
-                trade_updates = TradeUpdate(trade_to_update.id, "Move to BE, after first TP", 1, str(trade_to_update.order_id))
+                trade_updates = TradeUpdate(trade_to_update.id, "Move to BE, after first TP", 1, str(trade_to_update.order_id), metatrader.account)
                 db.insert_trade_update(trade_updates)
 
 def prefilter_message(message: str) -> bool:
@@ -262,7 +317,8 @@ def create_trade_dicts(trade_dict, message_id, config, mt_key):
                 'volume': symbol_config['default_lot_size'],
                 'db_message_id': message_id,
                 'SL': trade_dict.get('stop_loss', '0'),
-                'TP': '0'
+                'TP': '0',
+                'account_id': trade_dict['account_id']
             }
             trade_dicts.append(new_trade_dict)
         else:
@@ -281,7 +337,8 @@ def create_trade_dicts(trade_dict, message_id, config, mt_key):
                     'volume': symbol_config['default_lot_size'],
                     'db_message_id': message_id,
                     'SL': trade_dict.get('stop_loss', '0'),
-                    'TP': tp if tp is not None else '0'
+                    'TP': tp if tp is not None else '0',
+                    'account_id': trade_dict['account_id']
                 }
                 trade_dicts.append(new_trade_dict)
 

@@ -10,6 +10,7 @@ class Trade():
                  break_even: float,
                  order_id: str,
                  status: str,
+                 account_id: int,
                  id: str = None):
         self.message_id = message_id
         self.asset = asset
@@ -21,6 +22,7 @@ class Trade():
         self.break_even = break_even
         self.order_id = order_id
         self.status = status
+        self.account_id = account_id
         self.id = id
 
     def to_dict(self):
@@ -32,5 +34,7 @@ class Trade():
             'take_profit': self.take_profit,
             'entry': self.entry,
             'break_even': self.break_even,
-            'status': self.status
+            'status': self.status,
+            'account_id': self.account_id,
+            'order_id': self.order_id
         }

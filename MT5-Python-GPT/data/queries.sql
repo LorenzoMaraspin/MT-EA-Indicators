@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS trades (
     break_even DOUBLE PRECISION,
     order_id TEXT,
     volume DOUBLE PRECISION,
-    FOREIGN KEY (message_id) REFERENCES messages(id)
+    account_id INTEGER,
+    FOREIGN KEY (message_id) REFERENCES messages(id),
 );
 ---
 CREATE TABLE IF NOT EXISTS trade_updates (
@@ -28,5 +29,19 @@ CREATE TABLE IF NOT EXISTS trade_updates (
     update_text TEXT,
     new_value DOUBLE PRECISION,
     order_id TEXT,
+    account_id INTEGER,
     FOREIGN KEY (trade_id) REFERENCES trades(id)
+);
+---
+CREATE TABLE IF NOT EXISTS software_accounts (
+    mt5_account_id INTEGER PRIMARY KEY,
+    mt5_server TEXT,
+    mt5_broker TEXT,
+    mt5_balance INTEGER,
+    mt5_password TEXT,
+    environment TEXT,
+    telegram_id TEXT,
+    telegram_phone TEXT,
+    telegram_channels TEXT,
+    telegram_hash TEXT
 );

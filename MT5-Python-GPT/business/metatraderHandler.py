@@ -18,7 +18,6 @@ class MetatraderHandler:
         self.account = account
         self.password = password
         self.server = server
-        self.initialize_mt5()
 
     def initialize_mt5(self) -> bool:
         """
@@ -58,6 +57,7 @@ class MetatraderHandler:
         results = []
         trades_len = max(len(trades), minimum_trade_count)
 
+        self.initialize_mt5()
         for i in range(trades_len):
             trade_details = trades[i] if len(trades) > 1 else trades[0]
             trade_id = self.open_trade(trade_details)
@@ -72,7 +72,8 @@ class MetatraderHandler:
                     volume=trade_details['volume'],
                     stop_loss=trade_details['SL'],
                     take_profit=trade_details['TP'],
-                    entry=trade_details['entry_price']
+                    entry=trade_details['entry_price'],
+                    account_id=trade_details['account_id']
                 )
                 results.append(trade)
 
@@ -89,6 +90,7 @@ class MetatraderHandler:
         Returns:
             Optional[Tuple[int, float]]: Tuple containing order type and price, or None if preparation fails.
         """
+        self.initialize_mt5()
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
             logger.error(f"Symbol {symbol} not found or not available.")
@@ -133,6 +135,8 @@ class MetatraderHandler:
         Returns:
             Optional[int]: Trade ID if successful, None otherwise.
         """
+
+        self.initialize_mt5()
         preparation_result = self.preparation_trade(trade_details['symbol'], trade_details['direction'])
         if preparation_result is None:
             return None
@@ -175,6 +179,8 @@ class MetatraderHandler:
         Returns:
             Optional[float]: The new stop loss value if successful, None otherwise.
         """
+
+        self.initialize_mt5()
         position = mt5.positions_get(ticket=int(order_id))
         if not position:
             logger.error(f"Position with trade ID {order_id} not found.")
@@ -212,6 +218,8 @@ class MetatraderHandler:
             new_sl (Optional[float]): New stop loss value.
             new_tps (Optional[float]): New take profit value.
         """
+
+        self.initialize_mt5()
         position = mt5.positions_get(ticket=int(order_id))
         if not position:
             logger.error(f"Position with trade ID {order_id} not found.")
@@ -248,6 +256,8 @@ class MetatraderHandler:
         Returns:
             Optional[int]: The result code of the close operation if successful, None otherwise.
         """
+
+        self.initialize_mt5()
         position = mt5.positions_get(ticket=int(order_id))
         if not position:
             logger.error(f"Position with trade ID {order_id} not found.")
@@ -284,6 +294,8 @@ class MetatraderHandler:
         Returns:
             List[int]: List of open position tickets.
         """
+        logger.setLevel(logging.CRITICAL)
+        self.initialize_mt5()
         try:
             positions = mt5.positions_get()
             if positions is None:
@@ -291,6 +303,7 @@ class MetatraderHandler:
                 return []
 
             open_positions = [position.ticket for position in positions]
+            logger.setLevel(logging.INFO)
             return open_positions
         except Exception as e:
             logger.error("Exception occurred while getting all positions: %s", e)
@@ -303,6 +316,7 @@ class MetatraderHandler:
         Returns:
             Optional[float]: Account balance if successful, None otherwise.
         """
+        self.initialize_mt5()
         account_info = mt5.account_info()
         if account_info is None:
             logger.error("Failed to get account info, error code = %s", mt5.last_error())
