@@ -144,16 +144,15 @@ class TelegramAnalyzer:
     def update_signal_trade(self, existing_message, parsed_text, message):
         try:
             existing_trades = self.dbHandler.get_trades_by_id(existing_message.id)
-            trades = create_trade_dicts(parsed_text, existing_message.id, self.config, "MT5")[
-                     -len(existing_trades):]
-            for i, element in enumerate(existing_trades):
-                trade = trades[0] if len(trades) < len(existing_trades) else trades[i]
-                element.stop_loss = trade['SL']
-                element.take_profit = trade['TP']
-                for mt_handler in self.metatraderHandlers:
+            for mt_handler in self.metatraderHandlers:
+                parsed_text['account_id'] = mt_handler.account
+                trades = create_trade_dicts(parsed_text, existing_message.id, self.config, "MT5")[-len(existing_trades):]
+                for i, element in enumerate(existing_trades):
+                    trade = trades[0] if len(trades) < len(existing_trades) else trades[i]
+                    element.stop_loss = trade['SL']
+                    element.take_profit = trade['TP']
                     mt_handler.update_trade(element.order_id, element.stop_loss, element.take_profit)
                     self.dbHandler.update_trade(element)
-
             message.processed = True
             self.dbHandler.update_message(message)
         except Exception as e:
