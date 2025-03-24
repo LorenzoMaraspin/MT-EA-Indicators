@@ -46,12 +46,20 @@ def update_config_with_accounts(account, config):
         'ftmo': {
             'US30': generate_broker_config("US30.cash", 3, [2.0, 0.15], account),
             'XAUUSD': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account),
-            'XAU': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account)
+            'XAU': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account),
+            'EURUSD': generate_broker_config("EURUSD", 2, [0.7, 0.06], account)
         },
         'vantage': {
             'US30': generate_broker_config("DJ30", 3, [2.0, 0.15], account),
             'XAUUSD': generate_broker_config("XAUUSD+", 2, [0.5, 0.04], account),
-            'XAU': generate_broker_config("XAUUSD+", 2, [0.5, 0.04], account)
+            'XAU': generate_broker_config("XAUUSD+", 2, [0.5, 0.04], account),
+            'EURUSD': generate_broker_config("EURUSD+", 2, [0.7, 0.06], account)
+        },
+        'fundingpips': {
+            'US30': generate_broker_config("DJI30", 3, [2.0, 0.02], account),
+            'XAUUSD': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account),
+            'XAU': generate_broker_config("XAUUSD", 2, [0.5, 0.04], account),
+            'EURUSD': generate_broker_config("EURUSD", 2, [0.7, 0.06], account)
         }
     }
 
