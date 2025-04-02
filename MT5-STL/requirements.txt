@@ -1,0 +1,3 @@
+telethon
+Metatrader5
+psycopg2
