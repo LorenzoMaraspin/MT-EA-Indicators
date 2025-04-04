@@ -45,6 +45,11 @@ def get_sw_configuration_by_account(accounts: list[Account]):
                 "symbol": "EURUSD",
                 "n_trades": 2,
                 "lot_size": 0.06
+            },
+            "NAS100": {
+                "symbol": "US100.cash",
+                "n_trades": 3,
+                "lot_size": 0.15
             }
         },
         "vantage": {
@@ -62,6 +67,11 @@ def get_sw_configuration_by_account(accounts: list[Account]):
                 "symbol": "EURUSD+",
                 "n_trades": 2,
                 "lot_size": 0.06
+            },
+            "NAS100": {
+                "symbol": "NAS100",
+                "n_trades": 3,
+                "lot_size": 0.20
             }
         },
         "fundingpips": {
@@ -79,6 +89,11 @@ def get_sw_configuration_by_account(accounts: list[Account]):
                 "symbol": "EURUSD",
                 "n_trades": 2,
                 "lot_size": 0.06
+            },
+            "NAS100": {
+                "symbol": "NDX100",
+                "n_trades": 3,
+                "lot_size": 0.01
             }
         }
     }

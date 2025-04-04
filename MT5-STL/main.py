@@ -2,9 +2,10 @@ import logging
 from business.mt5Handler import MetatraderHandler
 from data.dbHandler import dbHandler
 import asyncio
+import threading
 from business.tgHandler import TelegramAnalyzer
 from utility.utillty_config import read_env_file, get_sw_configuration_by_account
-
+from utility.utility_mt5 import verify_open_trades_or_be
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SmartTradeAnalyzer")
 logger.setLevel(logging.INFO)
@@ -33,7 +34,24 @@ async def main():
                 logger.warning(f"❌ Connection error: {e}, restarting in 5 seconds...")
                 await asyncio.sleep(5)
 
-    await asyncio.gather(run_analyzer())
+    async def check_metatrader():
+        while True:
+            verify_open_trades_or_be(account_config,db)
+    #await asyncio.gather(run_analyzer(), check_metatrader())
+    #await asyncio.gather(run_analyzer())
+    def start_run_analyzer():
+        asyncio.run(run_analyzer())
+
+    def start_check_metatrader():
+        asyncio.run(check_metatrader())
+
+    thread_analyzer = threading.Thread(target=start_run_analyzer)
+    thread_metatrader = threading.Thread(target=start_check_metatrader)
+    thread_analyzer.start()
+    thread_metatrader.start()
+    thread_analyzer.join()
+    thread_metatrader.join()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

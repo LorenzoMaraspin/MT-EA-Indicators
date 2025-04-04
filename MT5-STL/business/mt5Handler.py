@@ -139,6 +139,77 @@ class MetatraderHandler:
 
     def update_trade_break_even(self, order_id, new_sl: Optional[float] = None):
         """
+        Try to set SL to break even with retries. If not valid after 3 attempts,
+        fallback to closest valid SL near entry price.
+
+        Args:
+            order_id (int): Trade ID
+            new_sl (Optional[float]): SL to set. If None, set to entry price (BE)
+
+        Returns:
+            Optional[float]: Final SL set, None if failed
+        """
+        position = mt5.positions_get(ticket=int(order_id))
+        if not position:
+            logger.error(f"Position with trade ID {order_id} not found.")
+            return None
+
+        position = position[0]
+        symbol_info = mt5.symbol_info(position.symbol)
+
+        if not symbol_info:
+            logger.error(f"Symbol info not found for {position.symbol}")
+            return None
+
+        price_open = position.price_open
+        sl_target = new_sl if new_sl is not None else price_open
+        point = symbol_info.point
+        digits = symbol_info.digits
+        stop_level = symbol_info.trade_stops_level * point
+
+        # Tentativi di mettere a BE
+        for attempt in range(3):
+            request = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "symbol": position.symbol,
+                "sl": float(sl_target),
+                "tp": float(position.tp),
+                "position": int(order_id),
+            }
+
+            result = mt5.order_send(request)
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                logger.info(f"[Attempt {attempt + 1}/3] SL set to BE for trade ID {order_id}")
+                return sl_target
+            else:
+                logger.warning(
+                    f"[Attempt {attempt + 1}/3] Failed to set SL to BE. Retcode: {result.retcode if result else 'None'}")
+
+        # Fallback: SL valido più vicino possibile all'entry price
+        logger.info(f"All 3 attempts to set SL to BE failed. Trying fallback...")
+
+        if position.type == mt5.ORDER_TYPE_BUY:
+            min_sl = position.price_current - stop_level
+            fallback_sl = max(min_sl, price_open - 2 * stop_level)
+        elif position.type == mt5.ORDER_TYPE_SELL:
+            min_sl = position.price_current + stop_level
+            fallback_sl = min(min_sl, price_open + 2 * stop_level)
+        else:
+            logger.error("Unknown position type.")
+            return None
+
+        request["sl"] = round(fallback_sl, digits)
+        result = mt5.order_send(request)
+        if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(f"SL fallback set near entry price for trade ID {order_id}")
+            return fallback_sl
+        else:
+            logger.error(
+                f"Fallback SL update failed for trade ID {order_id}, retcode: {result.retcode if result else 'None'}")
+            return None
+
+    """
+    def update_trade_break_even(self, order_id, new_sl: Optional[float] = None):
         Update the stop loss to break even for a given trade.
 
         Args:
@@ -147,7 +218,6 @@ class MetatraderHandler:
 
         Returns:
             Optional[float]: The new stop loss value if successful, None otherwise.
-        """
 
 
         position = mt5.positions_get(ticket=int(order_id))
@@ -177,7 +247,7 @@ class MetatraderHandler:
         except Exception as e:
             logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {order_id}: {e}")
             return None
-
+    """
     def update_trade(self, order_id, new_sl: Optional[float] = None, new_tps: Optional[float] = None) -> None:
         """
         Update stop loss and take profit for a trade.

@@ -4,7 +4,8 @@ import time
 from data.trade import Trade
 from data.tradeUpdate import TradeUpdate
 from utility.utility_tg import create_trade_entries
-
+import logging
+logger = logging.getLogger(__name__)
 
 def open_trades_multi_account(parsed_text, config, db_message_id):
     trade_results = []
@@ -107,3 +108,25 @@ def close_trades_multi_account(trades_to_close, config, msg_raw_text):
             else:
                 continue
     return trades_to_close, trade_updates_result
+
+def verify_open_trades_or_be(config, db):
+    for mt5 in config["MT5"]:
+        mt_handler = MetatraderHandler(account=mt5["ACCOUNT"], password=mt5["PASSWORD"], server=mt5["SERVER"])
+        open_trades_db = db.get_all_trades(mt5["ACCOUNT"])
+        if open_trades_db:
+            mt_handler.initialize_mt5()
+            open_trades_mt5 = mt_handler.get_all_position()
+            for msg_id, trades in open_trades_db.items():
+                order_ids = [trade.order_id for trade in trades]
+                if not all(order_id in open_trades_mt5 for order_id in order_ids):
+                    logger.info(f"Not all order_ids for message {msg_id} are in MT5 positions.")
+                    for trade in trades:
+                        if trade.order_id not in open_trades_mt5:
+                            trade.status = 'close'
+                        else:
+                            new_sl = mt_handler.update_trade_break_even(trade.order_id, None)
+                            trade.stop_loss = new_sl
+                            trade.break_even = new_sl
+                        db.update_trade(trade)
+
+

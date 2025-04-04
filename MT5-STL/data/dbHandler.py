@@ -349,7 +349,8 @@ class dbHandler:
         Get all trades with status 'open'.
 
         Returns:
-            list: A list of Trade instances with status 'open', or None if no trades are found.
+            dict: A dictionary where each key is a msg_id and the value is a list of Trade instances with that msg_id,
+                  or None if no trades are found.
 
         Raises:
             Exception: If there is an error during the query.
@@ -357,16 +358,32 @@ class dbHandler:
         logger.setLevel(logging.CRITICAL)
         conn = self._connect()
         cursor = conn.cursor()
-        response = []
-        select_query = """SELECT * FROM trades WHERE status = 'open' and account_id = %s;"""
+        response = {}
+        select_query = """SELECT * FROM trade WHERE status = 'open' and account_id = %s;"""
         try:
             cursor.execute(select_query, (account_id,))
             records = cursor.fetchall()
             if records:
                 logger.info(f"✅ Trade found")
                 for record in records:
-                    trade = Trade(id=record[0], message_id=record[1], asset=record[2], type=record[3], entry=record[4], stop_loss=record[5], take_profit=record[6], status=record[7], break_even=record[8], order_id=record[9], volume=record[10], account_id=record[11])
-                    response.append(trade)
+                    trade = Trade(
+                        trade_id=record[0],
+                        msg_id=record[1],
+                        order_id=record[2],
+                        account_id=record[3],
+                        symbol=record[4],
+                        direction=record[5],
+                        entry_price=record[6],
+                        stop_loss=record[7],
+                        take_profit=record[8],
+                        break_even=record[9],
+                        volume=record[10],
+                        status=record[11]
+                    )
+                    if trade.msg_id in response:
+                        response[trade.msg_id].append(trade)
+                    else:
+                        response[trade.msg_id] = [trade]
                 return response
             else:
                 logger.warning(f"❌ Trade not found")
@@ -374,7 +391,6 @@ class dbHandler:
         except Exception as e:
             logger.error(f"❌ Error selecting trade: {e}")
             raise e
-
         finally:
             logger.setLevel(logging.INFO)
             cursor.close()  # Close the cursor
