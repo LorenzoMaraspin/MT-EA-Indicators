@@ -136,19 +136,9 @@ class MetatraderHandler:
         except Exception as e:
             logger.error("Exception occurred: %s", e)
             return None
-
+    """
     def update_trade_break_even(self, order_id, new_sl: Optional[float] = None):
-        """
-        Try to set SL to break even with retries. If not valid after 3 attempts,
-        fallback to closest valid SL near entry price.
 
-        Args:
-            order_id (int): Trade ID
-            new_sl (Optional[float]): SL to set. If None, set to entry price (BE)
-
-        Returns:
-            Optional[float]: Final SL set, None if failed
-        """
         position = mt5.positions_get(ticket=int(order_id))
         if not position:
             logger.error(f"Position with trade ID {order_id} not found.")
@@ -210,6 +200,7 @@ class MetatraderHandler:
 
     """
     def update_trade_break_even(self, order_id, new_sl: Optional[float] = None):
+        """
         Update the stop loss to break even for a given trade.
 
         Args:
@@ -218,7 +209,7 @@ class MetatraderHandler:
 
         Returns:
             Optional[float]: The new stop loss value if successful, None otherwise.
-
+        """
 
         position = mt5.positions_get(ticket=int(order_id))
         if not position:
@@ -240,6 +231,9 @@ class MetatraderHandler:
             result = mt5.order_send(request)
             if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error(f"Failed to update stoploss/takeprofit for trade ID {order_id}, retcode = {result.retcode if result else 'None'}")
+                if result.retcode == 10016:  # Invalid stop loss
+                    logger.error(f"Invalid stop loss value for trade ID {order_id}.")
+                    self.close_trade(order_id)
                 return None
             else:
                 logger.info(f"Stoploss/Takeprofit updated for trade ID {order_id}")
@@ -247,7 +241,7 @@ class MetatraderHandler:
         except Exception as e:
             logger.error(f"Exception occurred while updating stoploss/takeprofit for trade ID {order_id}: {e}")
             return None
-    """
+
     def update_trade(self, order_id, new_sl: Optional[float] = None, new_tps: Optional[float] = None) -> None:
         """
         Update stop loss and take profit for a trade.
