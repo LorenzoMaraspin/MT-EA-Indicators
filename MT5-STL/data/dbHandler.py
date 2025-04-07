@@ -148,12 +148,12 @@ class dbHandler:
                     msg_id=record[0],
                     tg_msg_id=record[1],
                     tg_chat_id=record[2],
-                    tg_dst_chat_id=record[3],
-                    tg_dst_msg_id=record[4],
-                    msg_body=record[5],
-                    msg_timestamp=record[6],
-                    msg_status=record[7],
-                    tg_src_chat_name=record[8]
+                    tg_src_chat_name=record[3],
+                    tg_dst_chat_id=record[4],
+                    tg_dst_msg_id=record[5],
+                    msg_body=record[6],
+                    msg_timestamp=record[7],
+                    msg_status=record[8]
                 )
                 return message
             else:
